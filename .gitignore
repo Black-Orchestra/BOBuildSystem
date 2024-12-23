@@ -401,4 +401,7 @@ FodyWeavers.xsd
 
 # Virtual envs
 ./venv/
-/venv/
+venv/
+
+# Hatch builds
+dist/
