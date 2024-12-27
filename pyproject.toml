@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bobuild"
+dynamic = ["version"]
+description = "Build tools for Black Orchestra."
+readme = "README.md"
+requires-python = ">=3.12"
+license-files = { paths = ["LICENSE"] }
+keywords = []
+authors = [
+    { name = "Tuomo Kriikkula", email = "tuokri@tuta.io" },
+    { name = "Name2", email = "todo2@todo.todo" },
+    { name = "Name3", email = "todo3@todo.todo" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+dependencies = [
+    "loguru==0.7.3",
+]
+[project.optional-dependencies]
+dev = [
+    "hatch",
+    "mypy",
+    "ruff",
+]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "bobuild/_version.py"
+
+# [tool.hatch.metadata]
+# allow-direct-references = true

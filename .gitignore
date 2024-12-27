@@ -405,3 +405,4 @@ venv/
 
 # Hatch builds
 dist/
+bobuild/_version.py
