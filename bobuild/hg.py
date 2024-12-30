@@ -1,35 +1,49 @@
 import asyncio
 import os
 from pathlib import Path
+from typing import TypeVar
 
 from loguru import logger
 
-from multiconfig import MultiConfigParser
-
-# NOTE: allow missing values here on purpose for easy development.
-# None of these should be missing in production deployment, however.
-HG_USERNAME = os.environ.get("BO_HG_USERNAME", None)
-HG_PASSWORD = os.environ.get("BO_HG_PASSWORD", None)
-HG_PKG_REPO_PATH = Path(os.environ.get("BO_HG_PKG_REPO_PATH", "./.DUMMY_PKGS/")).resolve()
-HG_MAPS_REPO_PATH = Path(os.environ.get("BO_HG_MAPS_REPO_PATH", "./.DUMMY_MAPS/")).resolve()
-HG_PKG_REPO_URL = os.environ.get("BO_HG_PKG_REPO_URL", None)
-HG_MAPS_REPO_URL = os.environ.get("BO_HG_MAPS_REPO_URL", None)
+from bobuild.multiconfig import MultiConfigParser
 
 HG_CONFIG_PATH = (Path.home() / ".hgrc").resolve()
 
 # TODO: use logrotate on Linux if we run this as a service?
 logger.add("hg.log", rotation="10 MB", retention=5)
 
+T = TypeVar("T")
 
-async def hg_run_cmd(*args: str, cwd: Path | None = None) -> int:
-    logger.info("running hg command: '{}', cwd={}", args, cwd)
 
+def get_var(name: str, default: T) -> str | T:
+    if not name in os.environ:
+        logger.warning("{} not set in environment", name)
+    return os.environ.get(name, default)
+
+
+# NOTE: allow missing values here on purpose for easy development.
+# None of these should be missing in production deployment, however.
+HG_USERNAME = get_var("BO_HG_USERNAME", None)
+HG_PASSWORD = get_var("BO_HG_PASSWORD", None)
+HG_PKG_REPO_PATH = Path(get_var("BO_HG_PKG_REPO_PATH", "./.DUMMY_PKGS/")).resolve()
+HG_MAPS_REPO_PATH = Path(get_var("BO_HG_MAPS_REPO_PATH", "./.DUMMY_MAPS/")).resolve()
+HG_PKG_REPO_URL = get_var("BO_HG_PKG_REPO_URL", None)
+HG_MAPS_REPO_URL = get_var("BO_HG_MAPS_REPO_URL", None)
+
+
+async def run_cmd(
+        *args: str,
+        cwd: Path | None = None,
+        raise_on_error: bool = False,
+) -> int:
     hg_args = [
+        *args,
         "--noninteractive",
         "--verbose",
         "--pager", "never",
-        *args,
     ]
+
+    logger.info("running hg command: '{}', cwd={}", hg_args, cwd)
     proc = await asyncio.create_subprocess_exec(
         "hg",
         *hg_args,
@@ -38,48 +52,63 @@ async def hg_run_cmd(*args: str, cwd: Path | None = None) -> int:
         cwd=cwd,
     )
 
+    if not proc.stdout:
+        raise RuntimeError(f"process has no stdout: {proc}")
+    if not proc.stderr:
+        raise RuntimeError(f"process has no stderr: {proc}")
+
     while True:
         if proc.stdout.at_eof() and proc.stderr.at_eof():
             break
 
         out = (await proc.stdout.readline()
-               ).decode("utf-8", errors="replace")
+               ).decode("utf-8", errors="replace").strip()
         if out:
             logger.info(out)
         err = (await proc.stderr.readline()
-               ).decode("utf-8", errors="replace")
+               ).decode("utf-8", errors="replace").strip()
         if err:
             logger.info(err)
 
-    return await proc.wait()
+    ec = await proc.wait()
+    logger.info("hg command exited with code: {}", ec)
+
+    if raise_on_error and ec != 0:
+        raise RuntimeError(f"command exited with non-zero exit code: {ec}")
+
+    return ec
 
 
-async def hg_repo_exists(path: Path) -> bool:
+async def repo_exists(path: Path) -> bool:
     p = str(path.resolve())
-    ec = await hg_run_cmd("--cwd", p, "root")
+    ec = await run_cmd("--cwd", p, "root")
     return ec == 0
 
 
-async def hg_clone_repo(url: str, path: Path):
+async def clone_repo(url: str, path: Path):
     p = str(path.resolve())
-    ec = await hg_run_cmd()
+    await run_cmd("clone", url, p, raise_on_error=True)
 
 
-async def hg_sync_packages() -> None:
-    pass
+async def sync_packages() -> None:
+    await run_cmd("pull", cwd=HG_PKG_REPO_PATH, raise_on_error=True)
+    await run_cmd("update", "--clean", cwd=HG_PKG_REPO_PATH, raise_on_error=True)
 
 
-async def hg_sync_maps() -> None:
-    pass
+async def sync_maps() -> None:
+    await run_cmd("pull", cwd=HG_MAPS_REPO_PATH, raise_on_error=True)
+    await run_cmd("update", "--clean", cwd=HG_MAPS_REPO_PATH, raise_on_error=True)
 
 
-async def hg_incoming(path: Path) -> bool:
+async def incoming(path: Path) -> bool:
     """Returns 0 if there are incoming changes, 1 otherwise."""
-    ec = await hg_run_cmd("incoming", cwd=path)
+    ec = await run_cmd("incoming", cwd=path)
     return ec == 0
 
 
-def hg_ensure_config():
+def ensure_config():
+    logger.info("ensuring hg config is up to date")
+
     if not HG_CONFIG_PATH.exists():
         HG_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         HG_CONFIG_PATH.touch(exist_ok=True)
@@ -149,7 +178,14 @@ def hg_ensure_config():
 
 
 async def main() -> None:
-    hg_ensure_config()
+    ensure_config()
+
+    exists = await repo_exists(HG_PKG_REPO_PATH)
+    logger.info("hg repo exists: {}", exists)
+
+    repo_inc = await incoming(HG_PKG_REPO_PATH)
+    logger.info("hg repo has incoming: {}", repo_inc)
+
     # await hg_sync_packages()
     # await hg_sync_maps()
 
