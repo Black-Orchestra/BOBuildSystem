@@ -16,7 +16,7 @@ T = TypeVar("T")
 
 
 def get_var(name: str, default: T) -> str | T:
-    if not name in os.environ:
+    if name not in os.environ:
         logger.warning("{} not set in environment", name)
     return os.environ.get(name, default)
 
