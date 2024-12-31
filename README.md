@@ -1,5 +1,32 @@
 # BOBuildSystem
 
+## Development instructions
+
+Make sure you have at least Python 3.11 (newer is better)
+installed, then run the following command to install the
+project in development mode:
+
+```bash
+# From root directory of this repo:
+pip install -e .[dev]
+```
+
+When doing changes, make sure type hints and type safety
+is at least mostly correct. Type errors and warnings
+should only be silenced if there is no proper fix for them.
+Use mypy to check for typing errors:
+
+```bash
+# From root directory of this repo:
+mypy .
+```
+
+Use ruff to lint code:
+```bash
+# From root directory of this repo:
+ruff check .
+```
+
 ## TODO
 
 Setup script to run BO server as a Windows service:
