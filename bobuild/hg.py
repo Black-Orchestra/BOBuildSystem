@@ -1,25 +1,11 @@
 import asyncio
-import os
 from pathlib import Path
-from typing import TypeVar
 
-from loguru import logger
-
+from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
+from bobuild.utils import get_var
 
 HG_CONFIG_PATH = (Path.home() / ".hgrc").resolve()
-
-# TODO: use logrotate on Linux if we run this as a service?
-logger.add("hg.log", rotation="10 MB", retention=5)
-
-T = TypeVar("T")
-
-
-def get_var(name: str, default: T) -> str | T:
-    if name not in os.environ:
-        logger.warning("{} not set in environment", name)
-    return os.environ.get(name, default)
-
 
 # NOTE: allow missing values here on purpose for easy development.
 # None of these should be missing in production deployment, however.
