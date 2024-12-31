@@ -50,11 +50,11 @@ async def run_cmd(
         out = (await proc.stdout.readline()
                ).decode("utf-8", errors="replace").strip()
         if out:
-            logger.info(out)
+            logger.info("hg stdout: " + out)
         err = (await proc.stderr.readline()
                ).decode("utf-8", errors="replace").strip()
         if err:
-            logger.info(err)
+            logger.info("hg stderr: " + err)
 
     ec = await proc.wait()
     logger.info("hg command exited with code: {}", ec)
