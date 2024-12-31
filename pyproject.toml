@@ -25,6 +25,8 @@ classifiers = [
 ]
 
 dependencies = [
+    "githubkit==0.12.3",
+    "httpx==0.28.1",
     "loguru==0.7.3",
 ]
 [project.optional-dependencies]
