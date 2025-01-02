@@ -11,6 +11,8 @@ import tqdm
 import vdf
 
 from bobuild.log import logger
+from bobuild.utils import RS2_GAME_INSTALL_DIR
+from bobuild.utils import RS2_SERVER_INSTALL_DIR
 from bobuild.utils import get_var
 
 # Windows only variables.
@@ -19,20 +21,6 @@ _default_steamcmd_install_dir = r"C:\steamcmd\\"
 STEAMCMD_INSTALL_DIR = Path(get_var("BO_STEAMCMD_INSTALL_DIR",
                                     _default_steamcmd_install_dir)).resolve()
 STEAMCMD_EXE = STEAMCMD_INSTALL_DIR / "steamcmd.exe"
-
-if platform.system() == "Windows":
-    _default_rs2_game_dir = r"C:\rs2vietnam\\"
-    _default_rs2_server_dir = r"C:\rs2server\\"
-else:
-    # TODO: set good defaults for Linux too!
-    _default_rs2_game_dir = "TODO"
-    _default_rs2_server_dir = "TODO"
-
-# Use the same path for both the game and SDK.
-RS2_GAME_INSTALL_DIR = Path(get_var("BO_RS2_GAME_INSTALL_DIR",
-                                    _default_rs2_game_dir))
-RS2_SERVER_INSTALL_DIR = Path(get_var("BO_RS2_SERVER_INSTALL_DIR",
-                                      _default_rs2_server_dir))
 
 RS2_APPID = 418460
 RS2_SDK_APPID = 418500
@@ -185,6 +173,10 @@ async def install_update_steamcmd_windows():
 
 async def is_app_installed(app_dir: Path, app_id: int) -> bool:
     """Returns True if app is installed AND up to date."""
+
+    logger.info("checking app ID {} is installed in '{}'",
+                app_id, app_dir)
+
     _, out, err = await run_cmd(
         "+force_install_dir", str(app_dir),
         "+login", STEAMCMD_USERNAME, STEAMCMD_PASSWORD,
@@ -200,8 +192,7 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
     out += err
 
     install_state_found = False
-    needs_update = False  # TODO: not using this ATM!
-    build_id = -1  # TODO: check this!
+    build_id = 0
 
     lines = out.split("\n")
     for i, line in enumerate(lines):
@@ -219,12 +210,10 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
             ]
             for state in states:
                 if state == "Update Required":
-                    needs_update = True
-                    # break
-                    return True  # TODO: proper handling!
-                elif state == "Fully Installed":
-                    return True
-                    # break
+                    return False
+                # TODO: this check is unreliable! There might still be an update!
+                # elif state == "Fully Installed":
+                #    return True
                 elif state.lower() == "uninstalled":
                     return False
         # - size on disk: 13978936396 bytes, BuildID 16715839
@@ -236,22 +225,21 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
         logger.warning("'install state:' line not found in steamcmd output")
 
     # Install state is not reliable, check app_info_print output too.
-    if not needs_update and build_id:
-        pattern = re.compile(fr".*(\"{app_id}\"[\r\n]+{{.*}}).*", flags=re.DOTALL)
-        if match := pattern.match(out):
-            try:
-                data = vdf.loads(match.group(1))
-                # TODO: double-check 'public' is the correct branch for all apps!
-                latest_build_id = int(data[str(app_id)]["depots"]["branches"]["public"]["buildid"])
-                logger.info("latest BuildID: {}", latest_build_id)
-                if latest_build_id != build_id:
-                    needs_update = True
-            except Exception as e:
-                logger.error("error parsing VDF: {}: {}", type(e).__name__, e)
-        else:
-            logger.warning("pattern {} does not match output", pattern)
+    pattern = re.compile(fr".*(\"{app_id}\"[\r\n]+{{.*}}).*", flags=re.DOTALL)
+    if match := pattern.match(out):
+        try:
+            data = vdf.loads(match.group(1))
+            # TODO: double-check 'public' is the correct branch for all apps!
+            latest_build_id = int(data[str(app_id)]["depots"]["branches"]["public"]["buildid"])
+            logger.info("latest BuildID: {}", latest_build_id)
+            if latest_build_id != build_id:
+                return False
+        except Exception as e:
+            logger.error("error parsing VDF: {}: {}", type(e).__name__, e)
+    else:
+        logger.warning("pattern {} does not match output", pattern)
 
-    return False
+    return True
 
 
 async def install_validate_app(install_dir: Path, app_id: int):
