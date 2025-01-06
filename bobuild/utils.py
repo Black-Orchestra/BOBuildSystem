@@ -26,6 +26,10 @@ def get_var(name: str, default: T | object = _default) -> str | T:
     return os.environ.get(name, cast(T, default))
 
 
+def is_dev_env() -> bool:
+    return get_var("BO_DEV_ENV", "0") == "1"
+
+
 if platform.system() == "Windows":
     _default_rs2_game_dir = r"C:\rs2vietnam\\"
     _default_rs2_server_dir = r"C:\rs2server\\"
