@@ -189,7 +189,7 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
         return_output=True
     )
 
-    out += err  # type: ignore[operator]
+    out += err
 
     install_state_found = False
     build_id = 0

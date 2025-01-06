@@ -1,5 +1,3 @@
-# Similar to https://github.com/tuokri/udk_configparser.
-
 import configparser
 from typing import Any
 
