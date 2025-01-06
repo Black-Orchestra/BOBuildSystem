@@ -13,6 +13,10 @@ _default = object()
 
 # TODO: rename this entire module?
 
+# TODO: allow lazy loading of env vars here (and other modules?)
+#      - Return a 'var' object that checks if the env var exists on
+#        creation, if it does not exist, check again on the first use
+#        of the var?
 def get_var(name: str, default: T | object = _default) -> str | T:
     if default is _default:
         return os.environ[name]
