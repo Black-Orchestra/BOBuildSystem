@@ -1,5 +1,7 @@
 # BOBuildSystem
 
+Automated builds and server hosting for Black Orchestra.
+
 ## Development instructions
 
 Make sure you have at least Python 3.11 (newer is better)
@@ -22,12 +24,17 @@ mypy .
 ```
 
 Use ruff to lint code:
+
 ```bash
 # From root directory of this repo:
 ruff check .
 ```
 
-## TODO
+## Production deployment
+
+TODO: write deployment instructions.
+
+## Development TODOs
 
 Setup script to run BO server as a Windows service:
 
@@ -43,4 +50,3 @@ Setup script to run BO server as a Windows service:
 9. optional: upload files to workshop
 
 Optional: get the files from workshop
-
