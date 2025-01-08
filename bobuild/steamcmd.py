@@ -11,11 +11,8 @@ import tqdm
 import vdf
 
 from bobuild.log import logger
-from bobuild.utils import RS2_GAME_INSTALL_DIR
-from bobuild.utils import RS2_SERVER_INSTALL_DIR
 from bobuild.utils import get_var
 
-# Windows only variables.
 STEAMCMD_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
 _default_steamcmd_install_dir = r"C:\steamcmd\\"
 STEAMCMD_INSTALL_DIR = Path(get_var("BO_STEAMCMD_INSTALL_DIR",
@@ -252,16 +249,16 @@ async def install_validate_app(install_dir: Path, app_id: int):
     )
 
 
-async def is_rs2_installed() -> bool:
-    return await is_app_installed(RS2_GAME_INSTALL_DIR, RS2_APPID)
-
-
-async def is_rs2_sdk_installed() -> bool:
-    return await is_app_installed(RS2_GAME_INSTALL_DIR, RS2_SDK_APPID)
-
-
-async def is_rs2_server_installed() -> bool:
-    return await is_app_installed(RS2_SERVER_INSTALL_DIR, RS2_DS_APPID)
+# async def is_rs2_installed() -> bool:
+#     return await is_app_installed(RS2_GAME_INSTALL_DIR, RS2_APPID)
+#
+#
+# async def is_rs2_sdk_installed() -> bool:
+#     return await is_app_installed(RS2_GAME_INSTALL_DIR, RS2_SDK_APPID)
+#
+#
+# async def is_rs2_server_installed() -> bool:
+#     return await is_app_installed(RS2_SERVER_INSTALL_DIR, RS2_DS_APPID)
 
 
 async def dry_run():
@@ -280,13 +277,13 @@ async def dry_run():
 async def main() -> None:
     await install_update_steamcmd()
 
-    rs2_installed = await is_rs2_installed()
-    rs2_sdk_installed = await is_rs2_sdk_installed()
-    rs2_server_installed = await is_rs2_server_installed()
-
-    logger.info("rs2_installed={}", rs2_installed)
-    logger.info("rs2_sdk_installed={}", rs2_sdk_installed)
-    logger.info("rs2_server_installed={}", rs2_server_installed)
+    # rs2_installed = await is_rs2_installed()
+    # rs2_sdk_installed = await is_rs2_sdk_installed()
+    # rs2_server_installed = await is_rs2_server_installed()
+    #
+    # logger.info("rs2_installed={}", rs2_installed)
+    # logger.info("rs2_sdk_installed={}", rs2_sdk_installed)
+    # logger.info("rs2_server_installed={}", rs2_server_installed)
 
 
 if __name__ == "__main__":

@@ -1,20 +1,10 @@
+import argparse
 import asyncio
 from pathlib import Path
 
+from bobuild.config import MercurialConfig
 from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
-from bobuild.utils import get_var
-
-HG_CONFIG_PATH = (Path.home() / ".hgrc").resolve()
-
-# NOTE: allow missing values here on purpose for easy development.
-# None of these should be missing in production deployment, however.
-HG_USERNAME = get_var("BO_HG_USERNAME", None)
-HG_PASSWORD = get_var("BO_HG_PASSWORD", None)
-HG_PKG_REPO_PATH = Path(get_var("BO_HG_PKG_REPO_PATH", "./.DUMMY_PKGS/")).resolve()
-HG_MAPS_REPO_PATH = Path(get_var("BO_HG_MAPS_REPO_PATH", "./.DUMMY_MAPS/")).resolve()
-HG_PKG_REPO_URL = get_var("BO_HG_PKG_REPO_URL", None)
-HG_MAPS_REPO_URL = get_var("BO_HG_MAPS_REPO_URL", None)
 
 
 async def run_cmd(
@@ -48,11 +38,11 @@ async def run_cmd(
             break
 
         out = (await proc.stdout.readline()
-               ).decode("utf-8", errors="replace").strip()
+               ).decode("utf-8", errors="replace").rstrip()
         if out:
             logger.info("hg stdout: " + out)
         err = (await proc.stderr.readline()
-               ).decode("utf-8", errors="replace").strip()
+               ).decode("utf-8", errors="replace").rstrip()
         if err:
             logger.info("hg stderr: " + err)
 
@@ -76,14 +66,9 @@ async def clone_repo(url: str, path: Path):
     await run_cmd("clone", url, p, raise_on_error=True)
 
 
-async def sync_packages() -> None:
-    await run_cmd("pull", cwd=HG_PKG_REPO_PATH, raise_on_error=True)
-    await run_cmd("update", "--clean", cwd=HG_PKG_REPO_PATH, raise_on_error=True)
-
-
-async def sync_maps() -> None:
-    await run_cmd("pull", cwd=HG_MAPS_REPO_PATH, raise_on_error=True)
-    await run_cmd("update", "--clean", cwd=HG_MAPS_REPO_PATH, raise_on_error=True)
+async def sync(repo_path: Path) -> None:
+    await run_cmd("pull", cwd=repo_path, raise_on_error=True)
+    await run_cmd("update", "--clean", cwd=repo_path, raise_on_error=True)
 
 
 async def incoming(path: Path) -> bool:
@@ -92,17 +77,17 @@ async def incoming(path: Path) -> bool:
     return ec == 0
 
 
-def ensure_config():
+def ensure_config(config: MercurialConfig):
     logger.info("ensuring hg config is up to date")
 
-    if not HG_CONFIG_PATH.exists():
-        HG_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        HG_CONFIG_PATH.touch(exist_ok=True)
+    if not config.hgrc_path.exists():
+        config.hgrc_path.parent.mkdir(parents=True, exist_ok=True)
+        config.hgrc_path.touch(exist_ok=True)
 
     updated = False
 
     cfg = MultiConfigParser()
-    cfg.read(HG_CONFIG_PATH)
+    cfg.read(config.hgrc_path)
 
     if "extensions" not in cfg:
         cfg["extensions"] = {}
@@ -136,42 +121,60 @@ def ensure_config():
     if ("bo_packages.prefix" not in cfg["auth"]
             or "bo_packages.username" not in cfg["auth"]
             or "bo_packages.password" not in cfg["auth"]
-            or cfg["auth"]["bo_packages.prefix"] != HG_PKG_REPO_URL
-            or cfg["auth"]["bo_packages.username"] != HG_USERNAME
-            or cfg["auth"]["bo_packages.password"] != HG_PASSWORD
+            or cfg["auth"]["bo_packages.prefix"] != config.pkg_repo_url
+            or cfg["auth"]["bo_packages.username"] != config.username
+            or cfg["auth"]["bo_packages.password"] != config.password
     ):
-        cfg["auth"]["bo_packages.prefix"] = HG_PKG_REPO_URL
-        cfg["auth"]["bo_packages.username"] = HG_USERNAME
-        cfg["auth"]["bo_packages.password"] = HG_PASSWORD
+        cfg["auth"]["bo_packages.prefix"] = config.pkg_repo_url
+        cfg["auth"]["bo_packages.username"] = config.username
+        cfg["auth"]["bo_packages.password"] = config.password
         updated = True
 
     if ("bo_maps.prefix" not in cfg["auth"]
             or "bo_maps.username" not in cfg["auth"]
             or "bo_maps.password" not in cfg["auth"]
-            or cfg["auth"]["bo_maps.prefix"] != HG_MAPS_REPO_URL
-            or cfg["auth"]["bo_maps.username"] != HG_USERNAME
-            or cfg["auth"]["bo_maps.password"] != HG_PASSWORD
+            or cfg["auth"]["bo_maps.prefix"] != config.maps_repo_url
+            or cfg["auth"]["bo_maps.username"] != config.username
+            or cfg["auth"]["bo_maps.password"] != config.password
     ):
-        cfg["auth"]["bo_maps.prefix"] = HG_MAPS_REPO_URL
-        cfg["auth"]["bo_maps.username"] = HG_USERNAME
-        cfg["auth"]["bo_maps.password"] = HG_PASSWORD
+        cfg["auth"]["bo_maps.prefix"] = config.maps_repo_url
+        cfg["auth"]["bo_maps.username"] = config.username
+        cfg["auth"]["bo_maps.password"] = config.password
         updated = True
 
     if updated:
-        with open(HG_CONFIG_PATH, "w") as f:
-            logger.info("writing config file: '{}'", HG_CONFIG_PATH)
+        with config.hgrc_path.open("w") as f:
+            logger.info("writing config file: '{}'", config.hgrc_path)
             cfg.write(f, space_around_delimiters=True)
 
 
+def configure() -> None:
+    cfg = MercurialConfig()
+    ensure_config(cfg)
+
+
 async def main() -> None:
-    ensure_config()
+    ap = argparse.ArgumentParser()
 
-    exists = await repo_exists(HG_PKG_REPO_PATH)
-    logger.info("hg repo exists: {}", exists)
+    action_choices = {
+        "configure": configure,
+    }
+    ap.add_argument(
+        "action",
+        choices=action_choices.keys(),
+        help=f"action to perform",
+    )
 
-    repo_inc = await incoming(HG_PKG_REPO_PATH)
-    logger.info("hg repo has incoming: {}", repo_inc)
+    args = ap.parse_args()
+    action = args.action
+    logger.info("performing action: {}", action)
+    action_choices[args.action]()
+    logger.info("exiting")
 
+    # exists = await repo_exists(HG_PKG_REPO_PATH)
+    # logger.info("hg repo exists: {}", exists)
+    # repo_inc = await incoming(HG_PKG_REPO_PATH)
+    # logger.info("hg repo has incoming: {}", repo_inc)
     # await hg_sync_packages()
     # await hg_sync_maps()
 

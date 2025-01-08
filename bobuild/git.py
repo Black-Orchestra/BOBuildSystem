@@ -2,15 +2,8 @@ import asyncio
 import re
 from pathlib import Path
 
+from bobuild.config import GitConfig
 from bobuild.log import logger
-from bobuild.utils import get_var
-
-_default_repo_path = Path().home() / "Documents/My Games/Rising Storm 2/ROGame/Src/WW2"
-
-GITHUB_TOKEN = get_var("BO_GITHUB_TOKEN")
-GITHUB_REPO_URL = f"https://oauth2:{GITHUB_TOKEN}@github.com/adriaNsteam/WW2.git"
-GITHUB_REPO_PATH = Path(get_var("BO_GITHUB_REPO_PATH", _default_repo_path)).absolute()
-GITHUB_REPO_BRANCH = get_var("BO_GITHUB_REPO_BRANCH", "main")
 
 
 async def run_cmd(
@@ -43,13 +36,13 @@ async def run_cmd(
             break
 
         out = (await proc.stdout.readline()
-               ).decode("utf-8", errors="replace").strip()
+               ).decode("utf-8", errors="replace").rstrip()
         if out:
             logger.info("git stdout: " + out)
             if return_output:
                 all_out.append(out)
         err = (await proc.stderr.readline()
-               ).decode("utf-8", errors="replace").strip()
+               ).decode("utf-8", errors="replace").rstrip()
         if err:
             logger.info("git stderr: " + err)
             if return_output:
@@ -95,7 +88,7 @@ async def pull_repo(repo_path: Path):
     )
 
 
-async def repo_has_update(repo_path: Path) -> bool:
+async def repo_has_update(repo_path: Path, branch: str) -> bool:
     _, out, err = await run_cmd(
         "fetch", "--dry-run", "--verbose",
         cwd=repo_path,
@@ -105,7 +98,7 @@ async def repo_has_update(repo_path: Path) -> bool:
 
     out += err  # type: ignore[operator]
 
-    pat = re.compile(fr".*\[up to date]\s+{GITHUB_REPO_BRANCH}.*",
+    pat = re.compile(fr".*\[up to date]\s+{branch}.*",
                      flags=re.DOTALL)
     if pat.match(out):
         return False
@@ -114,14 +107,16 @@ async def repo_has_update(repo_path: Path) -> bool:
 
 
 async def main() -> None:
-    exists = await repo_exists(GITHUB_REPO_PATH)
+    config = GitConfig()
+
+    exists = await repo_exists(config.repo_path)
     print(f"{exists=}")
 
-    has_update = await repo_has_update(GITHUB_REPO_PATH)
+    has_update = await repo_has_update(config.repo_path, config.branch)
     print(f"{has_update=}")
 
     if exists and has_update:
-        await pull_repo(GITHUB_REPO_PATH)
+        await pull_repo(config.repo_path)
 
 
 if __name__ == "__main__":
