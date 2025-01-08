@@ -12,6 +12,12 @@ Write-Output "Installing Python..."
 Write-Output "Installing VC Redist..."
 & "$PSScriptRoot\setup\install_vc_redist.ps1"
 
+Write-Output "Installing Git..."
+& "$PSScriptRoot\setup\install_git.ps1"
+
+Write-Output "Installing TortoiseHG..."
+& "$PSScriptRoot\setup\install_tortoisehg.ps1"
+
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
 $PythonScriptsPath = Join-Path -Path (Split-Path -Path $PythonPath -Parent) -ChildPath "\Scripts\"
@@ -21,26 +27,28 @@ if ( [System.IO.Directory]::Exists($PythonScriptsPath))
     {
         [Environment]::SetEnvironmentVariable(
                 "Path",
-                [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine) + $PythonScriptsPath,
-                [System.EnvironmentVariableTarget]::Machine)
+                [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::User) + $PythonScriptsPath,
+                [System.EnvironmentVariableTarget]::User)
     }
 }
 
-Write-Output "Installing Python packages if requirements.txt exists..."
-if ( [System.IO.File]::Exists("$PSScriptRoot\DataTools\requirements.txt"))
-{
-    Start-Process -FilePath "python.exe" `
-        -ArgumentList "-m", "ensurepip" `
-        -Wait `
-        -NoNewWindow
-    Start-Process -FilePath "python.exe" `
-        -ArgumentList "-m", "pip", "install", "--upgrade", "pip" `
-        -Wait `
-        -NoNewWindow
-    #    Start-Process -FilePath "python.exe" `
-    #        -ArgumentList "-m", "pip", "install", "-r", "$PSScriptRoot\DataTools\requirements.txt" `
-    #        -Wait `
-    #        -NoNewWindow
-}
+Write-Output "Installing bobuild Python module..."
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "-m", "ensurepip" `
+    -Wait `
+    -NoNewWindow
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "-m", "pip", "install", "--upgrade", "pip" `
+    -Wait `
+    -NoNewWindow
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "-m", "pip", "install", "$PSScriptRoot" `
+    -Wait `
+    -NoNewWindow
+
+# TODO: use bobuild tools to install RS2 server, game and SDK.
+
+Write-Output "Setting RS2 server firewall rules..."
+& "$PSScriptRoot\setup\allow_rs2_server_firewall.ps1"
 
 Write-Output "Done."
