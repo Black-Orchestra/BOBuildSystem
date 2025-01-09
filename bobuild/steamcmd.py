@@ -5,6 +5,8 @@ import re
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Literal
+from typing import overload
 
 import httpx
 import tqdm
@@ -25,6 +27,24 @@ RS2_DS_APPID = 418480
 
 STEAMCMD_USERNAME = get_var("BO_STEAMCMD_USERNAME")
 STEAMCMD_PASSWORD = get_var("BO_STEAMCMD_PASSWORD")
+
+
+@overload
+async def run_cmd(
+        *args: str,
+        raise_on_error: bool = False,
+        return_output: Literal[True] = ...,
+) -> tuple[int, str, str]:
+    ...
+
+
+@overload
+async def run_cmd(
+        *args: str,
+        raise_on_error: bool = False,
+        return_output: Literal[False] = ...,
+) -> tuple[int, None, None]:
+    ...
 
 
 async def run_cmd(
@@ -186,7 +206,7 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
         return_output=True
     )
 
-    out += err  # type: ignore[operator]
+    out += err
 
     install_state_found = False
     build_id = 0
@@ -237,6 +257,19 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
         logger.warning("pattern {} does not match output", pattern)
 
     return True
+
+
+async def workshop_build_item(
+        username: str,
+        password: str,
+        item_config_path: Path
+) -> None:
+    await run_cmd(
+        "+login", username, password,
+        "+workshop_build_item",
+        str(item_config_path.resolve()),
+        raise_on_error=True,
+    )
 
 
 async def install_validate_app(install_dir: Path, app_id: int):

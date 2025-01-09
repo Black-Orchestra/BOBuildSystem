@@ -15,7 +15,7 @@ if platform.system() == "Windows":
 else:
     # TODO: set good defaults for Linux too?
     _default_steamcmd_install_dir = "TODO"
-    _default_repo_path = "TODO"
+    _default_repo_path = "TODO"  # type: ignore[assignment]
     _default_rs2_game_dir = "TODO"
     _default_rs2_server_dir = "TODO"
     _steamcmd_exe_name = "steamcmd.sh"

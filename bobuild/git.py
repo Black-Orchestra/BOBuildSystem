@@ -1,9 +1,31 @@
 import asyncio
 import re
 from pathlib import Path
+from typing import Literal
+from typing import overload
 
 from bobuild.config import GitConfig
 from bobuild.log import logger
+
+
+@overload
+async def run_cmd(
+        *args: str,
+        cwd: Path | None = None,
+        raise_on_error: bool = False,
+        return_output: Literal[True] = ...,
+) -> tuple[int, str, str]:
+    ...
+
+
+@overload
+async def run_cmd(
+        *args: str,
+        cwd: Path | None = None,
+        raise_on_error: bool = False,
+        return_output: Literal[False] = ...,
+) -> tuple[int, None, None]:
+    ...
 
 
 async def run_cmd(
@@ -88,6 +110,15 @@ async def pull_repo(repo_path: Path):
     )
 
 
+async def fetch_repo(repo_path: Path) -> None:
+    await run_cmd(
+        "fetch",
+        "--verbose",
+        cwd=repo_path,
+        raise_on_error=True,
+    )
+
+
 async def repo_has_update(repo_path: Path, branch: str) -> bool:
     _, out, err = await run_cmd(
         "fetch", "--dry-run", "--verbose",
@@ -96,7 +127,7 @@ async def repo_has_update(repo_path: Path, branch: str) -> bool:
         return_output=True,
     )
 
-    out += err  # type: ignore[operator]
+    out += err
 
     pat = re.compile(fr".*\[up to date]\s+{branch}.*",
                      flags=re.DOTALL)
@@ -104,6 +135,14 @@ async def repo_has_update(repo_path: Path, branch: str) -> bool:
         return False
 
     return True
+
+
+async def hash_diff(repo_path: Path, repo_url: str) -> tuple[str, str]:
+    """Return commit tuple (current local hash, latest remote hash)."""
+    local_hash = (await run_cmd("rev-parse", "--verify", "HEAD", cwd=repo_path))[1]
+    remote_refs = (await run_cmd("ls-remote", repo_url, "HEAD"))[1]
+    remote_hash = remote_refs.split()[0]
+    return local_hash.strip(), remote_hash.strip()
 
 
 async def main() -> None:

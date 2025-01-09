@@ -1,17 +1,40 @@
 import argparse
 import asyncio
 from pathlib import Path
+from typing import Literal
+from typing import overload
 
 from bobuild.config import MercurialConfig
 from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
 
 
+@overload
 async def run_cmd(
         *args: str,
         cwd: Path | None = None,
         raise_on_error: bool = False,
-) -> int:
+        return_output: Literal[True] = ...,
+) -> tuple[int, str, str]:
+    ...
+
+
+@overload
+async def run_cmd(
+        *args: str,
+        cwd: Path | None = None,
+        raise_on_error: bool = False,
+        return_output: Literal[False] = ...,
+) -> tuple[int, None, None]:
+    ...
+
+
+async def run_cmd(
+        *args: str,
+        cwd: Path | None = None,
+        raise_on_error: bool = False,
+        return_output: bool = False,
+) -> tuple[int, None | str, None | str]:
     hg_args = [
         *args,
         "--noninteractive",
@@ -28,6 +51,9 @@ async def run_cmd(
         cwd=cwd,
     )
 
+    all_out = []
+    all_err = []
+
     if not proc.stdout:
         raise RuntimeError(f"process has no stdout: {proc}")
     if not proc.stderr:
@@ -41,10 +67,14 @@ async def run_cmd(
                ).decode("utf-8", errors="replace").rstrip()
         if out:
             logger.info("hg stdout: " + out)
+            if return_output:
+                all_out.append(out)
         err = (await proc.stderr.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if err:
             logger.info("hg stderr: " + err)
+            if return_output:
+                all_err.append(err)
 
     ec = await proc.wait()
     logger.info("hg command exited with code: {}", ec)
@@ -52,7 +82,10 @@ async def run_cmd(
     if raise_on_error and ec != 0:
         raise RuntimeError(f"command exited with non-zero exit code: {ec}")
 
-    return ec
+    if return_output:
+        return ec, "\n".join(all_out), "\n".join(all_err)
+    else:
+        return ec, None, None
 
 
 async def repo_exists(path: Path) -> bool:
@@ -69,6 +102,13 @@ async def clone_repo(url: str, path: Path):
 async def sync(repo_path: Path) -> None:
     await run_cmd("pull", cwd=repo_path, raise_on_error=True)
     await run_cmd("update", "--clean", cwd=repo_path, raise_on_error=True)
+
+
+async def hash_diff(repo_path: Path, repo_url: str) -> tuple[str, str]:
+    """Return commit tuple (current local hash, incoming hash)."""
+    local_hash = (await run_cmd("id", "-i", cwd=repo_path))[1]
+    remote_hash = (await run_cmd("id", "-r", "tip", repo_url))[1]
+    return local_hash.strip(), remote_hash.strip()
 
 
 async def incoming(path: Path) -> bool:

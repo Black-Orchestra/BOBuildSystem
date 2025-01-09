@@ -137,17 +137,12 @@ def redis_dep(context: Annotated[Context, TaskiqDepends()]) -> Redis:
     return Redis(connection_pool=context.state.redis, decode_responses=True)
 
 
-# TODO: Custom config dataclass!
-def config_dep(context: Annotated[Context, TaskiqDepends()]) -> None:
-    pass
+def hg_config_dep(_: Annotated[Context, TaskiqDepends()]) -> MercurialConfig:
+    return MercurialConfig()
 
 
-def hg_config_dep(context: Annotated[Context, TaskiqDepends()]) -> MercurialConfig:
-    pass
-
-
-def git_config_dep(context: Annotated[Context, TaskiqDepends()]) -> GitConfig:
-    pass
+def git_config_dep(_: Annotated[Context, TaskiqDepends()]) -> GitConfig:
+    return GitConfig()
 
 
 # TODO: why use these via tasks? Just use redis directly?!
@@ -181,6 +176,16 @@ async def set_val(
         await redis.persist(key)
 
 
+async def dummy_hash_task() -> tuple[str, str]:
+    return "", ""
+
+
+def log_hash_diffs(hashes: tuple[str, str], name: str):
+    if hashes[0] and hashes[1]:
+        logger.info("{}: local hash: {}, remote hash: {}",
+                    name, hashes[0], hashes[1])
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 # TODO: we can leave behind long-running garbage processes
@@ -206,18 +211,77 @@ async def check_for_updates(
             return
 
         # TODO: do something with this?
-        _ = await set_update_in_progress(True)
+        old_update_timestamp = await set_update_in_progress(True)
+        if old_update_timestamp:
+            logger.warning(
+                "old update in-progress flag was set, "
+                "cleanup was potentially skipped: {}", old_update_timestamp)
 
         # TODO: configuration object!
         hg_pkgs_incoming_task = bobuild.hg.incoming(hg_config.pkg_repo_path)
         hg_maps_incoming_task = bobuild.hg.incoming(hg_config.maps_repo_path)
-        git_has_update_task = bobuild.git.repo_has_update(git_config.repo_path)
+        git_has_update_task = bobuild.git.repo_has_update(git_config.repo_path, git_config.branch)
 
+        logger.info("running all repo update check tasks")
         hg_pkgs_inc, hg_maps_inc, git_has_update = await asyncio.gather(
             hg_pkgs_incoming_task,
             hg_maps_incoming_task,
             git_has_update_task,
         )
+
+        logger.info("hg packages repo has update available: {}", hg_pkgs_inc)
+        logger.info("hg maps repo has update available: {}", hg_maps_inc)
+        logger.info("git repo has update available: {}", git_has_update)
+
+        hash_diffs_tasks = []
+        sync_tasks = []
+
+        any_sync_task = any((hg_pkgs_inc, hg_maps_inc, git_has_update))
+
+        # We add dummy hash diff tasks here to make sure the number of
+        # tasks is always the same for the asyncio.await gather below.
+        # TODO: there's a better way to do this, refactor later!
+        if hg_pkgs_inc:
+            hash_diffs_tasks.append(bobuild.hg.hash_diff(
+                hg_config.pkg_repo_path, hg_config.pkg_repo_url))
+            sync_tasks.append(bobuild.hg.sync(hg_config.pkg_repo_path))
+        elif any_sync_task:
+            hash_diffs_tasks.append(dummy_hash_task())
+
+        if hg_maps_inc:
+            hash_diffs_tasks.append(bobuild.hg.hash_diff(
+                hg_config.maps_repo_path, hg_config.maps_repo_url))
+            sync_tasks.append(bobuild.hg.sync(hg_config.maps_repo_path))
+        elif any_sync_task:
+            hash_diffs_tasks.append(dummy_hash_task())
+
+        if git_has_update:
+            hash_diffs_tasks.append(bobuild.git.hash_diff(
+                git_config.repo_path, git_config.repo_url))
+            sync_tasks.append(bobuild.hg.sync(git_config.repo_path))
+        elif any_sync_task:
+            hash_diffs_tasks.append(dummy_hash_task())
+
+        if hash_diffs_tasks:
+            logger.info("running {} hash diff tasks", len(hash_diffs_tasks))
+            hg_pkg_hashes, hg_maps_hashes, git_hashes = await asyncio.gather(*hash_diffs_tasks)
+            log_hash_diffs(hg_pkg_hashes, "hg packages repo")
+            log_hash_diffs(hg_maps_hashes, "hg maps repo")
+            log_hash_diffs(git_hashes, "git repo")
+        else:
+            logger.info("no hash diff tasks, all up to date")
+
+        if sync_tasks:
+            logger.info("running {} repo sync tasks", len(sync_tasks))
+            await asyncio.gather(*sync_tasks)
+        else:
+            logger.info("no repo sync tasks, all up to date")
+            return
+
+        # 1. compile code task
+        # 2. list all packages and maps to brew (include the .u file)
+        # 3. brew all content
+        # 4. generate report (list number of warnings)
 
         await asyncio.sleep(2 * 60)
         print("DONE!")
