@@ -9,6 +9,7 @@ from bobuild.log import logger
 
 _file_dir = Path(__file__).parent.resolve()
 _repo_dir = _file_dir.parent
+_draw_y = 880
 _glow_x = 4
 _glow_y = 4
 
