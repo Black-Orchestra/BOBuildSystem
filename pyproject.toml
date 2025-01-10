@@ -28,6 +28,7 @@ dependencies = [
     "Pillow==11.1.0",
     "boltons==24.1.0",
     "discord.py==2.4.0",
+    "hachiko @ {root:uri}/submodules/hachiko",
     "httpx==0.28.1",
     "loguru==0.7.3",
     "taskiq-redis==1.0.2",
@@ -47,5 +48,11 @@ source = "vcs"
 [tool.hatch.build.hooks.vcs]
 version-file = "bobuild/_version.py"
 
-# [tool.hatch.metadata]
-# allow-direct-references = true
+# TODO: builds section is experimental as this is not really
+#   meant to be distributed as a package.
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel.force-include]
+"submodules/hachiko" = "hachiko"
