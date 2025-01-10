@@ -8,6 +8,12 @@ Make sure you have at least Python 3.11 (newer is better)
 installed, then run the following command to install the
 project in development mode:
 
+Clone the repository with submodules:
+
+```bash
+git clone --recurse-submodules git@github.com:tuokri/BOBuildSystem.git
+```
+
 ```bash
 # From root directory of this repo:
 pip install -e .[dev]
