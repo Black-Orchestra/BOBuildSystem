@@ -1,3 +1,4 @@
+from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image
@@ -12,6 +13,16 @@ _repo_dir = _file_dir.parent
 _draw_y = 880
 _glow_x = 4
 _glow_y = 4
+
+
+def find_map_names(base_dir: Path) -> set[str]:
+    roes = base_dir.rglob("*.roe")
+    return {
+        str(file.stem) for file in roes
+        if (file.name.startswith("RRTE")
+            or file.name.startswith("DRTE"))
+           and file.stat().st_size > 4096 * 1024
+    }
 
 
 def linear_convert(
@@ -31,6 +42,12 @@ def draw_map_preview_file(
         font_file: Path,
         font_color: tuple[int, int, int],
 ):
+    logger.info(
+        "drawing map preview, map_name={}, template_file={}, output_file={}"
+        ", font_file={}, font_color={}",
+        map_name, template_file, output_file, font_file, font_color,
+    )
+
     img = Image.open(template_file)
     iw, ih = img.size
 
@@ -106,7 +123,6 @@ def draw_map_preview_file(
         fill=font_color,
     )
 
-    img.show()
     img.save(output_file)
 
 
@@ -114,12 +130,26 @@ def main() -> None:
     # BO red is cc1417.
     red = (204, 20, 23)
     draw_map_preview_file(
-        map_name="DRTE-ElAlamein",
+        map_name="DRTE-ElAlamein@@@@@@@@@@@@@@@@@@@@@@",
         template_file=_repo_dir / "workshop/bo_beta_workshop_map.png",
         output_file=_repo_dir / "workshop/generated/BOBetaMapImgTest.png",
         font_file=_repo_dir / "workshop/FRONTAGE-REGULAR.OTF",
         font_color=red,
     )
+
+    test_dir = Path(r"P:\BO_Repos\BO_Maps")
+    if test_dir.exists():
+        map_names = find_map_names(test_dir)
+        with ThreadPoolExecutor() as executor:
+            for map_name in map_names:
+                executor.submit(
+                    draw_map_preview_file,
+                    map_name=map_name,
+                    template_file=_repo_dir / "workshop/bo_beta_workshop_map.png",
+                    output_file=_repo_dir / f"workshop/generated/BOBetaMapImg_{map_name}.png",
+                    font_file=_repo_dir / "workshop/FRONTAGE-REGULAR.OTF",
+                    font_color=red,
+                )
 
 
 if __name__ == "__main__":
