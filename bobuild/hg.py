@@ -202,7 +202,7 @@ async def main() -> None:
     ap.add_argument(
         "action",
         choices=action_choices.keys(),
-        help=f"action to perform",
+        help="action to perform",
     )
 
     args = ap.parse_args()
