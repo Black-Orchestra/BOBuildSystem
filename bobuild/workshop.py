@@ -1,6 +1,10 @@
+import argparse
+import asyncio
+from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
 
+import vdf
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFilter
@@ -13,6 +17,9 @@ _repo_dir = _file_dir.parent
 _draw_y = 880
 _glow_x = 4
 _glow_y = 4
+
+# BO red is cc1417.
+_bo_red = (204, 20, 23)
 
 
 def find_map_names(base_dir: Path) -> set[str]:
@@ -126,17 +133,16 @@ def draw_map_preview_file(
     img.save(output_file)
 
 
-def main() -> None:
-    # BO red is cc1417.
-    red = (204, 20, 23)
+async def test() -> None:
     draw_map_preview_file(
         map_name="DRTE-ElAlamein@@@@@@@@@@@@@@@@@@@@@@",
         template_file=_repo_dir / "workshop/bo_beta_workshop_map.png",
         output_file=_repo_dir / "workshop/generated/BOBetaMapImgTest.png",
         font_file=_repo_dir / "workshop/FRONTAGE-REGULAR.OTF",
-        font_color=red,
+        font_color=_bo_red,
     )
 
+    # TODO: take this as an argument?
     test_dir = Path(r"P:\BO_Repos\BO_Maps")
     if test_dir.exists():
         map_names = find_map_names(test_dir)
@@ -148,9 +154,132 @@ def main() -> None:
                     template_file=_repo_dir / "workshop/bo_beta_workshop_map.png",
                     output_file=_repo_dir / f"workshop/generated/BOBetaMapImg_{map_name}.png",
                     font_file=_repo_dir / "workshop/FRONTAGE-REGULAR.OTF",
-                    font_color=red,
+                    font_color=_bo_red,
                 )
 
 
+async def list_maps() -> None:
+    # TODO: take this as an argument?
+    test_dir = Path(r"P:\BO_Repos\BO_Maps")
+    if test_dir.exists():
+        map_names = sorted(find_map_names(test_dir))
+        for m in map_names:
+            print(m)
+
+
+def write_map_sws_config(
+        out_file: Path,
+        template_file: Path,
+        map_name: str,
+        content_folder: Path,
+        preview_file: Path,
+):
+    template = vdf.loads(template_file.read_text())
+    template["workshopitem"]["publishedfileid"] = 0  # Create new item.
+    template["workshopitem"]["contentfolder"] = str(content_folder.resolve())
+    template["workshopitem"]["previewfile"] = str(preview_file)
+    title = template["workshopitem"]["title"].format(_mapname=map_name)
+    template["workshopitem"]["title"] = title
+    desc = template["workshopitem"]["description"].format(
+        _mapname=map_name,
+        _git_hash="null",
+        _hg_pkg_hash="null",
+        _hg_maps_hash="null",
+    )
+    template["workshopitem"]["changenote"] = "Initial upload of dummy files."
+    template["workshopitem"]["description"] = desc
+
+    with out_file.open("w") as f:
+        logger.info("writing '{}'", out_file)
+        vdf.dump(template, f, pretty=True)
+
+
+def do_map_first_time_config(
+        map_name: str,
+) -> Path:
+    p = Path(_repo_dir) / "workshop/generated/sws_map_staging/" / map_name
+    p.mkdir(parents=True, exist_ok=True)
+
+    preview_file = p / f"BOBetaMapImg_{map_name}.png"
+    draw_map_preview_file(
+        map_name=map_name,
+        template_file=_repo_dir / "workshop/bo_beta_workshop_map.png",
+        output_file=preview_file,
+        font_file=_repo_dir / "workshop/FRONTAGE-REGULAR.OTF",
+        font_color=_bo_red,
+    )
+
+    write_map_sws_config(
+        out_file=p / f"{map_name}.vdf",
+        template_file=_repo_dir / "workshop/BOBetaMapTemplate.vdf",
+        map_name=map_name,
+        content_folder=p,
+        preview_file=preview_file,
+    )
+
+    return p
+
+
+async def first_time_upload_all_maps(
+        # maps_dir: Path,
+) -> None:
+    """WARNING: this will create new workshop items for all
+    BO dev maps and list their workshop IDs. The SWS items are
+    created with only a dummy file (the preview image) in them.
+
+    Run this as a first-time setup action to create the SWS items
+    for later usage in automation.
+
+    TODO: add option to skip existing items?
+    """
+    # TODO: take this as an argument!!!
+    maps_dir = Path(r"P:\BO_Repos\BO_Maps")
+
+    logger.info("first-time uploading all maps")
+
+    map_names = sorted(find_map_names(maps_dir))
+
+    with ThreadPoolExecutor() as executor:
+        futs: list[Future[Path]] = []
+        for map_name in map_names:
+            futs.append(executor.submit(
+                do_map_first_time_config, map_name))
+
+        for f in futs:
+            ex = f.exception()
+            if ex:
+                logger.error("future {} failed with error: {}", f, ex)
+
+    # 1. find list of maps in published?
+    # 2. generate .vdf files for maps
+    # 3. render workshop preview images
+    # 4. upload maps (WITH EMPTY FILES!)
+    # 5. print {map_name -> sws_id} dict
+
+
+async def main() -> None:
+    ap = argparse.ArgumentParser()
+
+    action_choices = {
+        "test": test,
+        "list_maps": list_maps,
+        "first_time_upload_all_maps": first_time_upload_all_maps,
+    }
+    ap.add_argument(
+        "action",
+        choices=action_choices.keys(),
+        help="action to perform",
+    )
+
+    args = ap.parse_args()
+    action = args.action
+    logger.info("performing action: {}", action)
+    await action_choices[args.action]()
+    logger.info("exiting")
+
+
+# TODO: functions to format .vdf workshop files from the templates.
+
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
