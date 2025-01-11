@@ -406,3 +406,6 @@ venv/
 # Hatch builds
 dist/
 bobuild/_version.py
+
+# Downloaded binaries
+bin/*.exe
