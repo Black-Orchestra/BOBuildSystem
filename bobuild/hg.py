@@ -66,13 +66,13 @@ async def run_cmd(
         out = (await proc.stdout.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if out:
-            logger.info("hg stdout: " + out)
+            logger.info("hg stdout: {}", out)
             if return_output:
                 all_out.append(out)
         err = (await proc.stderr.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if err:
-            logger.info("hg stderr: " + err)
+            logger.info("hg stderr: {}", err)
             if return_output:
                 all_err.append(err)
 

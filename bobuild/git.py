@@ -60,13 +60,13 @@ async def run_cmd(
         out = (await proc.stdout.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if out:
-            logger.info("git stdout: " + out)
+            logger.info("git stdout: {}", out)
             if return_output:
                 all_out.append(out)
         err = (await proc.stderr.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if err:
-            logger.info("git stderr: " + err)
+            logger.info("git stderr: {}", err)
             if return_output:
                 all_err.append(err)
 

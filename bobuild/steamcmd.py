@@ -87,13 +87,13 @@ async def run_cmd(
         out = (await proc.stdout.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if out:
-            logger.info("SteamCMD stdout: " + out)
+            logger.info("SteamCMD stdout: {}", out)
             if return_output:
                 all_out.append(out)
         err = (await proc.stderr.readline()
                ).decode("utf-8", errors="replace").rstrip()
         if err:
-            logger.info("SteamCMD stderr: " + err)
+            logger.info("SteamCMD stderr: {}", err)
             if return_output:
                 all_err.append(err)
 
@@ -113,7 +113,7 @@ async def install_update_steamcmd():
     if platform.system() == "Windows":
         await install_update_steamcmd_windows()
     else:
-        raise NotImplemented("https://developer.valvesoftware.com/wiki/SteamCMD#Linux")
+        raise NotImplementedError("https://developer.valvesoftware.com/wiki/SteamCMD#Linux")
 
 
 def file_is_older_than(
