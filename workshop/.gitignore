@@ -1,2 +1,4 @@
 generated/BOBetaGenerated.vdf
 generated/BOBetaMapImgTest.png
+generated/sws_map_staging/*
+!generated/sws_map_staging/.gitkeep
