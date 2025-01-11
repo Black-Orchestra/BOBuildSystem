@@ -18,6 +18,9 @@ Write-Output "Installing Git..."
 Write-Output "Installing TortoiseHG..."
 & "$PSScriptRoot\setup\install_tortoisehg.ps1"
 
+Write-Output "Downloading UE3ShaderCachePatcherCLI..."
+& "$PSScriptRoot\setup\install_shadercachepatcher.ps1"
+
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
 $PythonScriptsPath = Join-Path -Path (Split-Path -Path $PythonPath -Parent) -ChildPath "\Scripts\"
