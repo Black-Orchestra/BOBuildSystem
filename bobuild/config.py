@@ -1,5 +1,6 @@
 import platform
 from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 
 from boltons.cacheutils import cachedproperty
@@ -96,8 +97,65 @@ class SteamCmdConfig:
         return get_var("BO_STEAMCMD_PASSWORD")
 
 
+def map_ids_factory() -> dict[str, int]:
+    return {
+        "DRTE-Bardia": -1,
+        "DRTE-ElAlamein": -1,
+        "DRTE-HalfayaPass": -1,
+        "DRTE-Leros": -1,
+        "DRTE-LongstopHill": -1,
+        "DRTE-Mareth": -1,
+        "DRTE-Medjez": -1,
+        "DRTE-Tobruk": -1,
+        "RRTE-Apartments": -1,
+        "RRTE-Barashka": -1,
+        "RRTE-Barracks": -1,
+        "RRTE-Beach_Invasion_Sim": -1,
+        "RRTE-Betio": -1,
+        "RRTE-BiblioHill": -1,
+        "RRTE-Brecourt": -1,
+        "RRTE-CommissarsHouse": -1,
+        "RRTE-Demyansk": -1,
+        "RRTE-FallenFighters": -1,
+        "RRTE-Foy": -1,
+        "RRTE-GrainElevator": -1,
+        "RRTE-GuadalCanal": -1,
+        "RRTE-HacksawRidge": -1,
+        "RRTE-Halbe_BreakoutBlockOut": -1,
+        "RRTE-Hanto": -1,
+        "RRTE-HellsCorners": -1,
+        "RRTE-HirosakiCastle": -1,
+        "RRTE-Horson": -1,
+        "RRTE-IwoJima": -1,
+        "RRTE-Kobura": -1,
+        "RRTE-Kwajalein": -1,
+        "RRTE-MaggotHill": -1,
+        "RRTE-MamayevKurgan": -1,
+        "RRTE-MarcoPolo": -1,
+        "RRTE-Mutanchiang": -1,
+        "RRTE-MyshkovaRiver": -1,
+        "RRTE-Oosterbeek": -1,
+        "RRTE-PavlovsHouse": -1,
+        "RRTE-Peleliu": -1,
+        "RRTE-PortBrest": -1,
+        "RRTE-RamreeIsland": -1,
+        "RRTE-RedOctoberFactory": -1,
+        "RRTE-Reichstag": -1,
+        "RRTE-Saipan": -1,
+        "RRTE-Shumshu": -1,
+        "RRTE-ShuriCastle": -1,
+        "RRTE-Spartanovka": -1,
+        "RRTE-Station": -1,
+        "RRTE-Suribachi": -1,
+        "RRTE-Univermag": -1,
+    }
+
+
 @dataclass(frozen=True)
 class RS2Config:
+    bo_dev_beta_workshop_id: int = 3404127489
+    bo_dev_beta_map_ids: dict[str, int] = field(default_factory=map_ids_factory)
+
     @cachedproperty
     def game_install_dir(self) -> Path:
         return Path(get_var("BO_RS2_GAME_INSTALL_DIR",
@@ -107,3 +165,11 @@ class RS2Config:
     def server_install_dir(self) -> Path:
         return Path(get_var("BO_RS2_SERVER_INSTALL_DIR",
                             _default_rs2_server_dir)).resolve()
+
+    @cachedproperty
+    def published_dir(self) -> Path:
+        return Path.home() / "Documents/My Games/Rising Storm 2/ROGame/Published/"
+
+    @cachedproperty
+    def unpublished_dir(self) -> Path:
+        return Path.home() / "Documents/My Games/Rising Storm 2/ROGame/Unpublished/"
