@@ -1,11 +1,16 @@
 "workshopitem"
 {
-    "appid" "418460"
-    "publishedfileid" "__MAP_PUBLISHED_FILE_ID__"
-    "contentfolder" "{_contentfolder}"
-    "previewfile" "{_previewfile}"
-    "visibility" "1"
-    "title" "{_mapname} [BO DEV BETA]"
-    "description" "{_mapname}.\nBlack Orchestra Beta automated developer build.\nGit commit: {_git_hash}.\nMercurial packages commit: {_hg_pkg_hash}.\nMercurial maps commit: {_hg_maps_hash}."
-    "changenote" "{_changenote}"
+	"appid"	"418460"
+	"publishedfileid"	"__MAP_PUBLISHED_FILE_ID__"
+	"contentfolder"	"{_contentfolder}"
+	"previewfile"	"{_previewfile}"
+	"visibility"	"1"
+	"title"	"{_mapname} [BO DEV BETA]"
+	"description"	"{_mapname}.
+Black Orchestra Beta automated developer build.
+Git commit: {_git_hash}.
+Mercurial packages commit: {_hg_pkg_hash}.
+Mercurial maps commit: {_hg_maps_hash}.
+	"
+	"changenote" "{_changenote}"
 }
