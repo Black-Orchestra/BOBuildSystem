@@ -1,4 +1,8 @@
+import asyncio
 import os
+import platform
+from typing import Any
+from typing import Coroutine
 from typing import TypeVar
 from typing import cast
 
@@ -7,6 +11,18 @@ from bobuild.log import logger
 T = TypeVar("T")
 
 _default = object()
+
+
+def asyncio_run(coro: Coroutine[Any, Any, T]) -> T:
+    if platform.system() == "Windows":
+        # noinspection PyUnresolvedReferences
+        import winloop
+        winloop.install()
+        return asyncio.run(coro)
+    else:
+        # noinspection PyUnresolvedReferences
+        import uvloop
+        return uvloop.run(coro)
 
 
 def get_var(name: str, default: T | object = _default) -> str | T:
