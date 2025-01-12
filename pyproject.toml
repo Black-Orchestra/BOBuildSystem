@@ -33,6 +33,7 @@ dependencies = [
     "loguru==0.7.3",
     "taskiq-redis==1.0.2",
     "taskiq[orjson]==0.11.10",
+    "tqdm==4.67.1",
     "vdf==3.4",
 ]
 [project.optional-dependencies]
