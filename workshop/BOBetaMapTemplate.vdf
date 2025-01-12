@@ -6,6 +6,6 @@
     "previewfile" "{_previewfile}"
     "visibility" "1"
     "title" "{_mapname} [BO DEV BETA]"
-    "description" "{_mapname}.&#10;Black Orchestra Beta automated developer build.&#10;Git commit: {_git_hash}.&#10;Mercurial packages commit: {_hg_pkg_hash}.&#10;Mercurial maps commit: {_hg_maps_hash}."
+    "description" "{_mapname}.\nBlack Orchestra Beta automated developer build.\nGit commit: {_git_hash}.\nMercurial packages commit: {_hg_pkg_hash}.\nMercurial maps commit: {_hg_maps_hash}."
     "changenote" "{_changenote}"
 }
