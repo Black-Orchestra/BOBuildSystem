@@ -237,25 +237,29 @@ async def check_for_updates(
                 "old update in-progress flag was set, "
                 "cleanup was potentially skipped: {}", old_update_timestamp)
 
-        # TODO: run clone tasks in "parallel".
+        # TODO: ensure hg config is correct every time here?
+        # bobuild.hg.ensure_config(hg_config)
+
+        clone_tasks = []
 
         if not await bobuild.git.repo_exists(git_config.repo_path):
             logger.info("git repo does not exist in '{}', cloning", git_config.repo_path)
             git_config.repo_path.mkdir(parents=True, exist_ok=True)
-            await bobuild.git.clone_repo(git_config.repo_url, git_config.repo_path)
-
-        # TODO: ensure hg config is correct every time here?
-        # bobuild.hg.ensure_config(hg_config)
+            clone_tasks.append(bobuild.git.clone_repo(git_config.repo_url, git_config.repo_path))
 
         if not await bobuild.hg.repo_exists(hg_config.pkg_repo_path):
             logger.info("hg repo does not exist in '{}', cloning", hg_config.pkg_repo_path)
             hg_config.pkg_repo_path.mkdir(parents=True, exist_ok=True)
-            await bobuild.hg.clone_repo(hg_config.pkg_repo_url, hg_config.pkg_repo_path)
+            clone_tasks.append(bobuild.hg.clone_repo(hg_config.pkg_repo_url, hg_config.pkg_repo_path))
 
         if not await bobuild.hg.repo_exists(hg_config.maps_repo_path):
             logger.info("hg repo does not exist in '{}', cloning", hg_config.maps_repo_path)
             hg_config.pkg_repo_path.mkdir(parents=True, exist_ok=True)
-            await bobuild.hg.clone_repo(hg_config.maps_repo_url, hg_config.maps_repo_path)
+            clone_tasks.append(bobuild.hg.clone_repo(hg_config.maps_repo_url, hg_config.maps_repo_path))
+
+        if clone_tasks:
+            logger.info("running {} clone tasks", len(clone_tasks))
+            await asyncio.gather(*clone_tasks)
 
         hg_pkgs_incoming_task = bobuild.hg.incoming(hg_config.pkg_repo_path)
         hg_maps_incoming_task = bobuild.hg.incoming(hg_config.maps_repo_path)
