@@ -7,8 +7,11 @@ from boltons.cacheutils import cachedproperty
 
 from bobuild.utils import get_var
 
+_repo_dir = Path(__file__).parent.parent.resolve()
+
 if platform.system() == "Windows":
-    _default_steamcmd_install_dir = r"C:\steamcmd\\"
+    # NOTE: this is mirrored in install_steamcmd.ps1.
+    _default_steamcmd_install_dir = str(_repo_dir / "bin/steamcmd/")
     _default_repo_path = Path().home() / "Documents/My Games/Rising Storm 2/ROGame/Src/WW2"
     _default_rs2_game_dir = r"C:\rs2vietnam\\"
     _default_rs2_server_dir = r"C:\rs2server\\"
@@ -77,12 +80,19 @@ class GitConfig:
 
 @dataclass(frozen=True)
 class SteamCmdConfig:
+    """
+    TODO: SteamCMD installation logic is duplicated in
+      install_steamcmd.ps1. Do we need both, Python and PowerShell
+      versions? Maybe get rid of the PS version and handle everything
+      with the Python scripts?
+    """
+
     download_url: str = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
 
     @cachedproperty
     def install_dir(self) -> Path:
-        return Path(get_var("BO_STEAMCMD_INSTALL_DIR"),
-                    _default_steamcmd_install_dir).resolve()
+        return Path(get_var("BO_STEAMCMD_INSTALL_DIR",
+                            _default_steamcmd_install_dir)).resolve()
 
     @cachedproperty
     def exe_path(self) -> Path:
@@ -95,6 +105,15 @@ class SteamCmdConfig:
     @cachedproperty
     def password(self) -> str:
         return get_var("BO_STEAMCMD_PASSWORD")
+
+    @cachedproperty
+    def steamguard_passkey(self) -> str:
+        return get_var("BO_STEAMGUARD_PASSKEY", "")
+
+    @cachedproperty
+    def steamguard_cli_path(self) -> Path:
+        # NOTE: this path is mirrored in install_steamguardcli.ps1.
+        return Path(_repo_dir / "bin/steamguard.exe")
 
 
 def map_ids_factory() -> dict[str, int]:

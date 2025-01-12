@@ -20,8 +20,10 @@ from taskiq_redis import RedisScheduleSource
 
 import bobuild.git
 import bobuild.hg
+import bobuild.run
 from bobuild.config import GitConfig
 from bobuild.config import MercurialConfig
+from bobuild.config import RS2Config
 from bobuild.log import InterceptHandler
 from bobuild.log import logger
 from bobuild.utils import get_var
@@ -145,6 +147,10 @@ def git_config_dep(_: Annotated[Context, TaskiqDepends()]) -> GitConfig:
     return GitConfig()
 
 
+def rs2_config_dep(_: Annotated[Context, TaskiqDepends()]) -> RS2Config:
+    return RS2Config()
+
+
 # TODO: why use these via tasks? Just use redis directly?!
 @broker.task(timeout=30)
 async def get_val(
@@ -202,6 +208,7 @@ async def check_for_updates(
         context: Annotated[Context, TaskiqDepends()],
         hg_config: MercurialConfig = TaskiqDepends(hg_config_dep),
         git_config: GitConfig = TaskiqDepends(git_config_dep),
+        rs2_config: RS2Config = TaskiqDepends(rs2_config_dep),
 ) -> None:
     logger.info("checking for updates")
 
@@ -282,6 +289,15 @@ async def check_for_updates(
         # 2. list all packages and maps to brew (include the .u file)
         # 3. brew all content
         # 4. generate report (list number of warnings)
+        # 5. upload content to workshop
+
+        ww2u = rs2_config.published_dir / "CookedPC/WW2.u"
+        logger.info("patching WW2.u file in: '{}'", ww2u)
+        await bobuild.run.patch_shader_cache(
+            ww2u,
+            "SeekFreeShaderCache",
+            "WW2GameInfo.DummyObject",
+        )
 
         await asyncio.sleep(2 * 60)
         print("DONE!")

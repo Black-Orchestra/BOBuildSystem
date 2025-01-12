@@ -18,5 +18,14 @@ def get_var(name: str, default: T | object = _default) -> str | T:
     return os.environ.get(name, cast(T, default))
 
 
+def redact(x: str, args: list[str]) -> list[str]:
+    return [
+        arg
+        if arg != x
+        else "*" * len(arg)
+        for arg in args
+    ]
+
+
 def is_dev_env() -> bool:
     return get_var("BO_DEV_ENV", "0") == "1"

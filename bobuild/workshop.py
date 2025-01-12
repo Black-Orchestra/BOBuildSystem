@@ -3,6 +3,7 @@ import asyncio
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
+from pprint import pformat
 
 import vdf
 from PIL import Image
@@ -10,7 +11,10 @@ from PIL import ImageDraw
 from PIL import ImageFilter
 from PIL import ImageFont
 
+from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
+from bobuild.steamcmd import get_steamguard_code
+from bobuild.steamcmd import workshop_build_item
 
 _file_dir = Path(__file__).parent.resolve()
 _repo_dir = _file_dir.parent
@@ -209,15 +213,23 @@ def do_map_first_time_config(
         font_color=_bo_red,
     )
 
+    map_vdf_file = p / f"{map_name}.vdf"
+    content_folder = p / "content"
+
     write_map_sws_config(
-        out_file=p / f"{map_name}.vdf",
+        out_file=map_vdf_file,
         template_file=_repo_dir / "workshop/BOBetaMapTemplate.vdf",
         map_name=map_name,
-        content_folder=p,
+        content_folder=content_folder,
         preview_file=preview_file,
-    )
+    ),
 
-    return p
+    content_folder.mkdir(parents=True, exist_ok=True)
+    dummy_file = content_folder / "dummy.txt"
+    logger.info("writing '{}'", dummy_file)
+    dummy_file.write_text(f"This is a dummy file for {map_name}!")
+
+    return map_vdf_file
 
 
 async def first_time_upload_all_maps(
@@ -225,19 +237,22 @@ async def first_time_upload_all_maps(
 ) -> None:
     """WARNING: this will create new workshop items for all
     BO dev maps and list their workshop IDs. The SWS items are
-    created with only a dummy file (the preview image) in them.
+    created with only a dummy text file in them.
 
     Run this as a first-time setup action to create the SWS items
     for later usage in automation.
 
     TODO: add option to skip existing items?
     """
+    cfg = SteamCmdConfig()
+
     # TODO: take this as an argument!!!
     maps_dir = Path(r"P:\BO_Repos\BO_Maps")
 
     logger.info("first-time uploading all maps")
 
     map_names = sorted(find_map_names(maps_dir))
+    map_cfg_paths: list[Path] = []
 
     with ThreadPoolExecutor() as executor:
         futs: list[Future[Path]] = []
@@ -249,6 +264,32 @@ async def first_time_upload_all_maps(
             ex = f.exception()
             if ex:
                 logger.error("future {} failed with error: {}", f, ex)
+            else:
+                map_cfg_paths.append(f.result())
+
+    name_to_id: dict[str, int] = {}
+
+    pk = cfg.steamguard_passkey
+    map_cfg_paths = map_cfg_paths[:1]  # TODO: SLICING ONLY FOR DEBUGGING!
+    for map_cfg_path in map_cfg_paths:
+        code = await get_steamguard_code(cfg.steamguard_cli_path, pk)
+        logger.info("building workshop item: '{}'", map_cfg_path)
+        await workshop_build_item(
+            cfg.exe_path,
+            cfg.username,
+            cfg.password,
+            item_config_path=map_cfg_path,
+            steamguard_code=code,
+        )
+
+        map_name = map_cfg_path.stem
+        map_vdf = vdf.loads(map_cfg_path.read_text())
+        title = map_vdf["workshopitem"]["title"]
+        sws_id = int(map_vdf["workshopitem"]["publishedfileid"])
+        logger.info("{}: {}: new workshop item ID: {}", map_name, title, sws_id)
+        name_to_id[map_name] = sws_id
+
+    logger.info("{}", pformat(name_to_id))
 
     # 1. find list of maps in published?
     # 2. generate .vdf files for maps

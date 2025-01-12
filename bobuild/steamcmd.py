@@ -4,6 +4,7 @@ import platform
 import re
 import tempfile
 import zipfile
+from functools import partial
 from pathlib import Path
 from typing import Literal
 from typing import overload
@@ -13,44 +14,43 @@ import tqdm
 import vdf
 
 from bobuild.log import logger
-from bobuild.utils import get_var
+from bobuild.run import run_process
+from bobuild.utils import redact
 
-STEAMCMD_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
-_default_steamcmd_install_dir = r"C:\steamcmd\\"
-STEAMCMD_INSTALL_DIR = Path(get_var("BO_STEAMCMD_INSTALL_DIR",
-                                    _default_steamcmd_install_dir)).resolve()
-STEAMCMD_EXE = STEAMCMD_INSTALL_DIR / "steamcmd.exe"
-
+# TODO: put these in a config class?
 RS2_APPID = 418460
 RS2_SDK_APPID = 418500
 RS2_DS_APPID = 418480
 
-STEAMCMD_USERNAME = get_var("BO_STEAMCMD_USERNAME")
-STEAMCMD_PASSWORD = get_var("BO_STEAMCMD_PASSWORD")
-
 
 @overload
 async def run_cmd(
+        steamcmd_path: Path,
         *args: str,
         raise_on_error: bool = False,
         return_output: Literal[True] = ...,
+        steamguard_code: str | None = None,
 ) -> tuple[int, str, str]:
     ...
 
 
 @overload
 async def run_cmd(
+        steamcmd_path: Path,
         *args: str,
         raise_on_error: bool = False,
         return_output: Literal[False] = ...,
+        steamguard_code: str | None = None,
 ) -> tuple[int, None, None]:
     ...
 
 
 async def run_cmd(
+        steamcmd_path: Path,
         *args: str,
         raise_on_error: bool = False,
         return_output: bool = False,
+        steamguard_code: str | None = None,
 ) -> tuple[int, None | str, None | str]:
     """Run SteamCMD command.
     If return_output is True, returns a tuple
@@ -64,9 +64,23 @@ async def run_cmd(
         *args,
     ]
 
-    logger.info("running SteamCMD command: '{}'", steamcmd_args)
+    if steamguard_code is not None:
+        # TODO: this is a VERY dirty hack. What if password argument was not provided?
+        login_idx = steamcmd_args.index("+login")
+        steamcmd_args = (
+                steamcmd_args[:login_idx + 3]
+                + [steamguard_code]
+                + steamcmd_args[login_idx + 3:]
+        )
+
+        # TODO: redacting it here is a bit pointless unless we do it everywhere?
+        logger.info("running SteamCMD command: '{}'",
+                    redact(steamguard_code, steamcmd_args))
+    else:
+        logger.info("running SteamCMD command: '{}'", steamcmd_args)
+
     proc = await asyncio.create_subprocess_exec(
-        str(STEAMCMD_EXE),
+        str(steamcmd_path.resolve()),
         *steamcmd_args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -128,7 +142,9 @@ def file_is_older_than(
     return True
 
 
-async def download_windows_zip() -> tuple[Path, bool]:
+async def download_windows_zip(
+        steamcmd_download_url: str,
+) -> tuple[Path, bool]:
     """Download steamcmd.zip to a temporary location.
     Return tuple where the first item is the .zip path and second
     item is a bool indicating whether the file was downloaded.
@@ -146,11 +162,11 @@ async def download_windows_zip() -> tuple[Path, bool]:
             dl_file, delta.total_seconds() / 60 / 60)
         return dl_file, False
 
-    logger.info("downloading '{}' to '{}'...", STEAMCMD_URL, dl_file)
+    logger.info("downloading '{}' to '{}'...", steamcmd_download_url, dl_file)
     client = httpx.AsyncClient()
     async with client.stream(
             "GET",
-            STEAMCMD_URL,
+            steamcmd_download_url,
             timeout=30.0,
             follow_redirects=True,
     ) as resp:
@@ -176,34 +192,46 @@ async def download_windows_zip() -> tuple[Path, bool]:
     return dl_file, True
 
 
-async def install_update_steamcmd_windows():
-    zip_path, new_zip = await download_windows_zip()
-    STEAMCMD_INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+async def install_update_steamcmd_windows(
+        download_url: str,
+        install_dir: Path,
+) -> None:
+    zip_path, new_zip = await download_windows_zip(download_url)
+    install_dir.mkdir(parents=True, exist_ok=True)
 
     if new_zip:
-        logger.info("extracting steamcmd.zip to '{}'...", STEAMCMD_INSTALL_DIR)
+        logger.info("extracting steamcmd.zip to '{}'...", install_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
-            z.extractall(STEAMCMD_INSTALL_DIR)
+            z.extractall(install_dir)
 
-    await dry_run()
+    await dry_run(install_dir / "steamcmd.exe")
 
 
-async def is_app_installed(app_dir: Path, app_id: int) -> bool:
+async def is_app_installed(
+        steamcmd_path: Path,
+        app_dir: Path,
+        app_id: int,
+        username: str,
+        password: str,
+        steamguard_code: str | None = None,
+) -> bool:
     """Returns True if app is installed AND up to date."""
 
     logger.info("checking app ID {} is installed in '{}'",
                 app_id, app_dir)
 
     _, out, err = await run_cmd(
+        steamcmd_path,
         "+force_install_dir", str(app_dir),
-        "+login", STEAMCMD_USERNAME, STEAMCMD_PASSWORD,
+        "+login", username, password,
         "+app_info_update", "1",
         "+app_status", str(app_id),
         "+app_info_print", str(app_id),
         "+logoff",
         "+quit",
         raise_on_error=True,
-        return_output=True
+        return_output=True,
+        steamguard_code=steamguard_code,
     )
 
     out += err
@@ -260,25 +288,39 @@ async def is_app_installed(app_dir: Path, app_id: int) -> bool:
 
 
 async def workshop_build_item(
+        steamcmd_path: Path,
         username: str,
         password: str,
-        item_config_path: Path
+        item_config_path: Path,
+        steamguard_code: str | None = None,
 ) -> None:
     await run_cmd(
+        steamcmd_path,
         "+login", username, password,
         "+workshop_build_item",
         str(item_config_path.resolve()),
+        "+quit",
         raise_on_error=True,
+        steamguard_code=steamguard_code,
     )
 
 
-async def install_validate_app(install_dir: Path, app_id: int):
+async def install_validate_app(
+        steamcmd_path: Path,
+        install_dir: Path,
+        app_id: int,
+        username: str,
+        password: str,
+        steamguard_code: str | None = None,
+) -> None:
     await run_cmd(
+        steamcmd_path,
         "+force_install_dir", str(install_dir),
-        "+login", STEAMCMD_USERNAME, STEAMCMD_PASSWORD,
+        "+login", username, password,
         f'"+app_update {app_id} validate"',
         "+quit",
         raise_on_error=True,
+        steamguard_code=steamguard_code,
     )
 
 
@@ -294,11 +336,12 @@ async def install_validate_app(install_dir: Path, app_id: int):
 #     return await is_app_installed(RS2_SERVER_INSTALL_DIR, RS2_DS_APPID)
 
 
-async def dry_run():
+async def dry_run(steamcmd_path: Path):
     """Run SteamCMD and login as anonymous user to let it
     auto-update itself.
     """
     await run_cmd(
+        steamcmd_path,
         "+login",
         "anonymous",
         "+exit",
@@ -307,8 +350,26 @@ async def dry_run():
     )
 
 
+async def get_steamguard_code(
+        steamguard_cli_path: Path,
+        passkey: str,
+) -> str:
+    out = (await run_process(
+        steamguard_cli_path,
+        "-p", passkey,
+        cwd=steamguard_cli_path.parent,
+        raise_on_error=True,
+        return_output=True,
+        redact=partial(redact, passkey),
+    ))[1]
+
+    return out.strip()
+
+
 async def main() -> None:
-    await install_update_steamcmd()
+    pass
+
+    # await install_update_steamcmd()
 
     # rs2_installed = await is_rs2_installed()
     # rs2_sdk_installed = await is_rs2_sdk_installed()
