@@ -20,12 +20,12 @@ _default = object()
 def asyncio_run(coro: Coroutine[Any, Any, T]) -> T:
     if platform.system() == "Windows":
         # noinspection PyUnresolvedReferences
-        import winloop
+        import winloop  # type: ignore[import-not-found]
         winloop.install()
         return asyncio.run(coro)
     else:
         # noinspection PyUnresolvedReferences
-        import uvloop
+        import uvloop  # type: ignore[import-not-found]
         return uvloop.run(coro)
 
 
@@ -61,10 +61,11 @@ def copy_tree(
         dst_dir: Path,
         src_glob: str | None = None,
 ):
+    src_files: list[Path]
     if src_glob is not None:
-        src_files: list[Path] = [x for x in src_dir.glob(src_glob) if x.is_file()]
+        src_files = [x for x in src_dir.glob(src_glob) if x.is_file()]
     else:
-        src_files: list[Path] = [x for x in src_dir.glob("*") if x.is_file()]
+        src_files = [x for x in src_dir.glob("*") if x.is_file()]
 
     # TODO: this needs improved handling for recursive dirs!
     fs: list[Future] = []
