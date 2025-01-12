@@ -1,6 +1,10 @@
 import asyncio
 import os
 import platform
+import shutil
+from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 from typing import Coroutine
 from typing import TypeVar
@@ -45,3 +49,31 @@ def redact(x: str, args: list[str]) -> list[str]:
 
 def is_dev_env() -> bool:
     return get_var("BO_DEV_ENV", "0") == "1"
+
+
+def copy_file(src: Path, dst: Path):
+    logger.info("copy: '{}' -> '{}'", src, dst)
+    shutil.copyfile(src, dst)
+
+
+def copy_tree(
+        src_dir: Path,
+        dst_dir: Path,
+        src_glob: str | None = None,
+):
+    if src_glob is not None:
+        src_files: list[Path] = [x for x in src_dir.glob(src_glob) if x.is_file()]
+    else:
+        src_files: list[Path] = [x for x in src_dir.glob("*") if x.is_file()]
+
+    # TODO: this needs improved handling for recursive dirs!
+    fs: list[Future] = []
+    with ThreadPoolExecutor() as executor:
+        for file in src_files:
+            dst = dst_dir / file.name
+            executor.submit(copy_file, file, dst)
+
+    for future in fs:
+        ex = future.exception()
+        if ex:
+            logger.error("future: {}: error: {}", future, ex)

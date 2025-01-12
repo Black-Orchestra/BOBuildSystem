@@ -15,6 +15,7 @@ import vdf
 
 from bobuild.log import logger
 from bobuild.run import run_process
+from bobuild.utils import asyncio_run
 from bobuild.utils import redact
 
 # TODO: put these in a config class?
@@ -299,7 +300,33 @@ async def workshop_build_item(
         "+login", username, password,
         "+workshop_build_item",
         str(item_config_path.resolve()),
+        "+logoff",
         "+quit",
+        raise_on_error=True,
+        steamguard_code=steamguard_code,
+    )
+
+
+async def workshop_build_item_many(
+        steamcmd_path: Path,
+        username: str,
+        password: str,
+        item_config_paths: list[Path],
+        steamguard_code: str | None = None,
+) -> None:
+    args = [
+        "+login", username, password,
+    ]
+
+    for cfg_path in item_config_paths:
+        args.append("+workshop_build_item")
+        args.append(str(cfg_path.resolve()))
+
+    args += ["+logoff", "+quit"]
+
+    await run_cmd(
+        steamcmd_path,
+        *args,
         raise_on_error=True,
         steamguard_code=steamguard_code,
     )
@@ -318,6 +345,7 @@ async def install_validate_app(
         "+force_install_dir", str(install_dir),
         "+login", username, password,
         f'"+app_update {app_id} validate"',
+        "+logoff",
         "+quit",
         raise_on_error=True,
         steamguard_code=steamguard_code,
@@ -344,6 +372,7 @@ async def dry_run(steamcmd_path: Path):
         steamcmd_path,
         "+login",
         "anonymous",
+        "+logoff",
         "+exit",
         # TODO: SteamCMD exit codes are undocumented!
         # raise_on_error=True,
@@ -381,4 +410,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio_run(main())

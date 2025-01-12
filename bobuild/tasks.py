@@ -1,6 +1,8 @@
 import asyncio
 import datetime
 import logging
+import platform
+import shutil
 from typing import Annotated
 
 from redis.asyncio import ConnectionPool
@@ -14,8 +16,8 @@ from taskiq import TaskiqScheduler
 from taskiq import TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq.serializers import ORJSONSerializer
+from taskiq_pg import AsyncpgResultBackend
 from taskiq_redis import ListQueueBroker
-from taskiq_redis import RedisAsyncResultBackend
 from taskiq_redis import RedisScheduleSource
 
 import bobuild.git
@@ -26,8 +28,15 @@ from bobuild.config import MercurialConfig
 from bobuild.config import RS2Config
 from bobuild.log import InterceptHandler
 from bobuild.log import logger
+from bobuild.utils import copy_tree
 from bobuild.utils import get_var
 from bobuild.utils import is_dev_env
+
+if platform.system() == "Windows":
+    # noinspection PyUnresolvedReferences
+    import winloop
+
+    winloop.install()
 
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
@@ -67,18 +76,19 @@ if is_dev_env():
         return _update_timestamp is not None
 else:
     REDIS_URL = get_var("BO_REDIS_URL")
+    PG_URL = get_var("BO_POSTRGRES_URL")
 
-    redis_async_result: RedisAsyncResultBackend = RedisAsyncResultBackend(
-        redis_url=REDIS_URL,
-        result_ex_time=10 * 60,
-        keep_results=False,
-        timeout=30,
+    result_backend: AsyncpgResultBackend = AsyncpgResultBackend(
+        dsn=PG_URL,
+        keep_results=True,
+        table_name="taskiq_result",
+        field_for_task_id="Text",
         serializer=ORJSONSerializer(),
     )
 
     broker = ListQueueBroker(
         url=REDIS_URL,
-        result_backend=redis_async_result,
+        result_backend=result_backend,
         serializer=ORJSONSerializer(),
     )
 
@@ -213,9 +223,12 @@ async def check_for_updates(
     logger.info("checking for updates")
 
     try:
+        # TODO: get running task status from Postgres?
         if await update_is_running():
             logger.info("skip checking updates, update in-progress flag is already set")
             return
+
+        # Get task ID here, store it in DB and set in-progress state.
 
         # TODO: do something with this?
         old_update_timestamp = await set_update_in_progress(True)
@@ -224,7 +237,26 @@ async def check_for_updates(
                 "old update in-progress flag was set, "
                 "cleanup was potentially skipped: {}", old_update_timestamp)
 
-        # TODO: configuration object!
+        # TODO: run clone tasks in "parallel".
+
+        if not await bobuild.git.repo_exists(git_config.repo_path):
+            logger.info("git repo does not exist in '{}', cloning", git_config.repo_path)
+            git_config.repo_path.mkdir(parents=True, exist_ok=True)
+            await bobuild.git.clone_repo(git_config.repo_url, git_config.repo_path)
+
+        # TODO: ensure hg config is correct every time here?
+        # bobuild.hg.ensure_config(hg_config)
+
+        if not await bobuild.hg.repo_exists(hg_config.pkg_repo_path):
+            logger.info("hg repo does not exist in '{}', cloning", hg_config.pkg_repo_path)
+            hg_config.pkg_repo_path.mkdir(parents=True, exist_ok=True)
+            await bobuild.hg.clone_repo(hg_config.pkg_repo_url, hg_config.pkg_repo_path)
+
+        if not await bobuild.hg.repo_exists(hg_config.maps_repo_path):
+            logger.info("hg repo does not exist in '{}', cloning", hg_config.maps_repo_path)
+            hg_config.pkg_repo_path.mkdir(parents=True, exist_ok=True)
+            await bobuild.hg.clone_repo(hg_config.maps_repo_url, hg_config.maps_repo_path)
+
         hg_pkgs_incoming_task = bobuild.hg.incoming(hg_config.pkg_repo_path)
         hg_maps_incoming_task = bobuild.hg.incoming(hg_config.maps_repo_path)
         git_has_update_task = bobuild.git.repo_has_update(git_config.repo_path, git_config.branch)
@@ -285,11 +317,57 @@ async def check_for_updates(
             logger.info("no repo sync tasks, all up to date")
             return
 
+        # 0. copy content to documents!
         # 1. compile code task
         # 2. list all packages and maps to brew (include the .u file)
         # 3. brew all content
         # 4. generate report (list number of warnings)
         # 5. upload content to workshop
+
+        unpub_pkgs = rs2_config.unpublished_dir / "CookedPC/Packages/WW2"
+        unpub_maps = rs2_config.unpublished_dir / "CookedPC/Maps/WW2"
+        pub_pkgs = rs2_config.published_dir / "CookedPC/Packages/WW2"
+        pub_maps = rs2_config.published_dir / "CookedPC/Maps/WW2"
+
+        logger.info("removing dir: '{}'", unpub_pkgs)
+        shutil.rmtree(unpub_pkgs, ignore_errors=True)
+        logger.info("removing dir: '{}'", unpub_maps)
+        shutil.rmtree(unpub_maps, ignore_errors=True)
+        logger.info("removing dir: '{}'", pub_pkgs)
+        shutil.rmtree(pub_pkgs, ignore_errors=True)
+        logger.info("removing dir: '{}'", pub_maps)
+        shutil.rmtree(pub_maps, ignore_errors=True)
+
+        unpub_pkgs.mkdir(parents=True, exist_ok=True)
+        unpub_maps.mkdir(parents=True, exist_ok=True)
+        pub_pkgs.mkdir(parents=True, exist_ok=True)
+        pub_maps.mkdir(parents=True, exist_ok=True)
+
+        copy_tree(hg_config.pkg_repo_path, unpub_pkgs, "*.upk")
+
+        await bobuild.run.vneditor_make(
+            rs2_config.rs2_documents_dir,
+            rs2_config.vneditor_exe,
+        )
+
+        roe_content: list[str] = [
+            file.stem for file in
+            unpub_maps.rglob(".roe")
+        ]
+
+        upk_content: list[str] = [
+            file.name for file in
+            unpub_pkgs.rglob(".upk")
+        ]
+
+        content_to_brew = ["WW2"] + roe_content + upk_content
+        logger.info("total number of content to brew: {}", len(content_to_brew))
+
+        await bobuild.run.vneditor_brew(
+            rs2_config.rs2_documents_dir,
+            rs2_config.vneditor_exe,
+            content_to_brew,
+        )
 
         ww2u = rs2_config.published_dir / "CookedPC/WW2.u"
         logger.info("patching WW2.u file in: '{}'", ww2u)

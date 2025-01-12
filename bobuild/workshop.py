@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
@@ -14,7 +13,8 @@ from PIL import ImageFont
 from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
 from bobuild.steamcmd import get_steamguard_code
-from bobuild.steamcmd import workshop_build_item
+from bobuild.steamcmd import workshop_build_item_many
+from bobuild.utils import asyncio_run
 
 _file_dir = Path(__file__).parent.resolve()
 _repo_dir = _file_dir.parent
@@ -195,7 +195,7 @@ def write_map_sws_config(
 
     with out_file.open("w") as f:
         logger.info("writing '{}'", out_file)
-        vdf.dump(template, f, pretty=True)
+        vdf.dump(template, f, pretty=True, escaped=False)
 
 
 def do_map_first_time_config(
@@ -270,18 +270,20 @@ async def first_time_upload_all_maps(
     name_to_id: dict[str, int] = {}
 
     pk = cfg.steamguard_passkey
-    map_cfg_paths = map_cfg_paths[:1]  # TODO: SLICING ONLY FOR DEBUGGING!
-    for map_cfg_path in map_cfg_paths:
-        code = await get_steamguard_code(cfg.steamguard_cli_path, pk)
-        logger.info("building workshop item: '{}'", map_cfg_path)
-        await workshop_build_item(
-            cfg.exe_path,
-            cfg.username,
-            cfg.password,
-            item_config_path=map_cfg_path,
-            steamguard_code=code,
-        )
+    code = await get_steamguard_code(cfg.steamguard_cli_path, pk)
 
+    logger.info("building {} workshop items", len(map_cfg_paths))
+    await workshop_build_item_many(
+        cfg.exe_path,
+        cfg.username,
+        cfg.password,
+        item_config_paths=map_cfg_paths,
+        steamguard_code=code,
+    )
+
+    # Read back the new item IDs written by SteamCMD.
+    for map_cfg_path in map_cfg_paths:
+        logger.info("built workshop item: '{}'", map_cfg_path)
         map_name = map_cfg_path.stem
         map_vdf = vdf.loads(map_cfg_path.read_text())
         title = map_vdf["workshopitem"]["title"]
@@ -319,8 +321,5 @@ async def main() -> None:
     logger.info("exiting")
 
 
-# TODO: functions to format .vdf workshop files from the templates.
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio_run(main())

@@ -189,9 +189,17 @@ class RS2Config:
                             _default_rs2_server_dir)).resolve()
 
     @cachedproperty
+    def rs2_documents_dir(self) -> Path:
+        return Path.home() / "Documents/My Games/Rising Storm 2"
+
+    @cachedproperty
     def published_dir(self) -> Path:
-        return Path.home() / "Documents/My Games/Rising Storm 2/ROGame/Published/"
+        return self.rs2_documents_dir / "ROGame/Published/"
 
     @cachedproperty
     def unpublished_dir(self) -> Path:
-        return Path.home() / "Documents/My Games/Rising Storm 2/ROGame/Unpublished/"
+        return self.rs2_documents_dir / "ROGame/Unpublished/"
+
+    @cachedproperty
+    def vneditor_exe(self):
+        return self.game_install_dir / "Binaries/Win64/VNEditor.exe"

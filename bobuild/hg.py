@@ -7,6 +7,7 @@ from typing import overload
 from bobuild.config import MercurialConfig
 from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
+from bobuild.utils import asyncio_run
 
 
 @overload
@@ -220,4 +221,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio_run(main())
