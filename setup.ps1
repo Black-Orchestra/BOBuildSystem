@@ -18,8 +18,16 @@ Write-Output "Installing Git..."
 Write-Output "Installing TortoiseHG..."
 & "$PSScriptRoot\setup\install_tortoisehg.ps1"
 
-Write-Output "Downloading UE3ShaderCachePatcherCLI..."
+Write-Output "Installing UE3ShaderCachePatcherCLI..."
 & "$PSScriptRoot\setup\install_shadercachepatcher.ps1"
+
+Write-Output "Installing SteamCMD..."
+& "$PSScriptRoot\setup\install_steamcmd.ps1"
+
+Write-Output "Installing steamguard-cli..."
+& "$PSScriptRoot\setup\install_steamguardcli.ps1"
+
+Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamguard-cli\'!"
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
