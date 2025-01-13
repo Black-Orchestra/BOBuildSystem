@@ -59,7 +59,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+     + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
@@ -108,7 +108,7 @@ CheckExitCode($Proc.ExitCode)
 
 Write-Output "Installing RS2..."
 $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2" `
     -NoNewWindow `
     -Wait `
     -PassThru
@@ -116,7 +116,7 @@ CheckExitCode($Proc.ExitCode)
 
 Write-Output "Installing RS2 SDK.."
 $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2_sdk" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_sdk" `
     -NoNewWindow `
     -Wait `
     -PassThru
@@ -124,7 +124,7 @@ CheckExitCode($Proc.ExitCode)
 
 Write-Output "Installing RS2 Dedicated Server..."
 $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2_server" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_server" `
     -NoNewWindow `
     -Wait `
     -PassThru
@@ -132,7 +132,7 @@ CheckExitCode($Proc.ExitCode)
 
 Write-Output "Ensuring Mercurial config is correct..."
 $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/hg/main.py", "ensure_config" `
+    -ArgumentList "$PSScriptRoot/bobuild/hg.py", "ensure_config" `
     -NoNewWindow `
     -Wait `
     -PassThru
