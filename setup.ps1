@@ -75,6 +75,12 @@ Start-Process -FilePath "python.exe" `
     -NoNewWindow `
     -Wait
 
+Write-Output "Ensuring Mercurial config is correct..."
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/hg/main.py", "ensure_config" `
+    -NoNewWindow `
+    -Wait
+
 Write-Output "Setting RS2 server firewall rules..."
 & "$PSScriptRoot\setup\allow_rs2_server_firewall.ps1"
 
