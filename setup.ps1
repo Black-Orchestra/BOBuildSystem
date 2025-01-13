@@ -6,6 +6,8 @@
 # TODO: this does not work properly on systems with multiple Python versions installed!
 #       - modify install_python.ps1 to use explicit Python installation path?
 
+$ErrorActionPreference = "Stop"
+
 Write-Output "Installing Python..."
 & "$PSScriptRoot\setup\install_python.ps1"
 
