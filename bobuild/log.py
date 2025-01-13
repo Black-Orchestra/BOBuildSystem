@@ -1,12 +1,18 @@
 import inspect
 import logging
+from pathlib import Path
 
 from loguru import logger
+
+from bobuild.utils import get_var
 
 # TODO: use logrotate on Linux if we run this as a service?
 
 # logger.remove()
-logger.add("bobuild.log", rotation="10 MB", retention=5)
+
+_log_dir = Path(get_var("BO_LOG_DIR", ".")).resolve()
+
+logger.add(_log_dir / "bobuild.log", rotation="10 MB", retention=5)
 logger.info("initialized logging")
 
 
