@@ -6,6 +6,19 @@
 # TODO: this does not work properly on systems with multiple Python versions installed!
 #       - modify install_python.ps1 to use explicit Python installation path?
 
+function CheckExitCode
+{
+    param (
+        [Parameter(Mandatory)]
+        [int]$ExitCode
+    )
+
+    if ($ExitCode -ne 0)
+    {
+        throw "Failed with exit code: ${ExitCode}"
+    }
+}
+
 $ErrorActionPreference = "Stop"
 
 Write-Output "Installing Python..."
@@ -36,7 +49,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+               + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
@@ -53,51 +66,67 @@ if ( [System.IO.Directory]::Exists($PythonScriptsPath))
 }
 
 Write-Output "Creating Python virtual environment..."
-Start-Process -FilePath "python.exe" `
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "-m", "venv", "venv" `
     -NoNewWindow `
-    -Wait
+    -Wait `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
 
 Write-Output "Activating venv..."
 & "$PSScriptRoot\venv\Scripts\activate.ps1"
 
 Write-Output "Installing bobuild Python module..."
-Start-Process -FilePath "python.exe" `
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "-m", "ensurepip" `
     -Wait `
-    -NoNewWindow
-Start-Process -FilePath "python.exe" `
+    -NoNewWindow `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "-m", "pip", "install", "--upgrade", "pip" `
     -Wait `
-    -NoNewWindow
-Start-Process -FilePath "python.exe" `
+    -NoNewWindow `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "-m", "pip", "install", "$PSScriptRoot" `
     -Wait `
-    -NoNewWindow
+    -NoNewWindow `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
 
 Write-Output "Installing RS2..."
-Start-Process -FilePath "python.exe" `
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2" `
     -NoNewWindow `
-    -Wait
+    -Wait `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
 
 Write-Output "Installing RS2 SDK.."
-Start-Process -FilePath "python.exe" `
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2_sdk" `
     -NoNewWindow `
-    -Wait
+    -Wait `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
 
 Write-Output "Installing RS2 Dedicated Server..."
-Start-Process -FilePath "python.exe" `
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2_server" `
     -NoNewWindow `
-    -Wait
+    -Wait `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
 
 Write-Output "Ensuring Mercurial config is correct..."
-Start-Process -FilePath "python.exe" `
+$Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "$PSScriptRoot/bobuild/hg/main.py", "ensure_config" `
     -NoNewWindow `
-    -Wait
+    -Wait `
+    -PassThru
+CheckExitCode($Proc.ExitCode)
 
 Write-Output "Setting RS2 server firewall rules..."
 & "$PSScriptRoot\setup\allow_rs2_server_firewall.ps1"
