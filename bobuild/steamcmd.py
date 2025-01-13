@@ -303,7 +303,6 @@ async def workshop_build_item(
         "+login", username, password,
         "+workshop_build_item",
         str(item_config_path.resolve()),
-        "+logoff",
         "+quit",
         raise_on_error=True,
         steamguard_code=steamguard_code,
@@ -325,7 +324,7 @@ async def workshop_build_item_many(
         args.append("+workshop_build_item")
         args.append(str(cfg_path.resolve()))
 
-    args += ["+logoff", "+quit"]
+    args += ["+quit"]
 
     await run_cmd(
         steamcmd_path,
@@ -355,7 +354,6 @@ async def install_validate_app(
 
     args += [
         f'"+app_update {app_id} validate"',
-        "+logoff",
         "+quit",
     ]
 
@@ -375,7 +373,6 @@ async def dry_run(steamcmd_path: Path):
         steamcmd_path,
         "+login",
         "anonymous",
-        "+logoff",
         "+exit",
         # TODO: SteamCMD exit codes are undocumented!
         # raise_on_error=True,
