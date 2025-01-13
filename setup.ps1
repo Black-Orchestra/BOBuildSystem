@@ -47,7 +47,7 @@ CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing SteamCMD..."
 & "$PSScriptRoot\setup\install_steamcmd.ps1"
-CheckExitCode($LASTEXITCODE)
+# CheckExitCode($LASTEXITCODE) NOTE: skipping this check on purpose!
 
 Write-Output "Installing steamguard-cli..."
 & "$PSScriptRoot\setup\install_steamguardcli.ps1"
@@ -57,7 +57,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-               + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
