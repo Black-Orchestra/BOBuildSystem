@@ -9,6 +9,9 @@
 Write-Output "Installing Python..."
 & "$PSScriptRoot\setup\install_python.ps1"
 
+Write-Output "Installing Nuget provider..."
+Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+
 Write-Output "Installing VC Redist..."
 & "$PSScriptRoot\setup\install_vc_redist.ps1"
 
@@ -42,6 +45,15 @@ if ( [System.IO.Directory]::Exists($PythonScriptsPath))
                 [System.EnvironmentVariableTarget]::User)
     }
 }
+
+Write-Output "Creating Python virtual environment..."
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "-m", "venv", "venv" `
+    -NoNewWindow `
+    -Wait
+
+Write-Output "Activating venv..."
+& "$PSScriptRoot\venv\Scripts\activate.ps1"
 
 Write-Output "Installing bobuild Python module..."
 Start-Process -FilePath "python.exe" `
