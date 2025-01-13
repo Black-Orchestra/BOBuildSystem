@@ -402,7 +402,10 @@ async def install_rs2(
         config: RS2Config,
         steamcmd_config: SteamCmdConfig,
 ):
-    code = await get_steamguard_code(steamcmd_config.steamguard_cli_path)
+    code = await get_steamguard_code(
+        steamcmd_config.steamguard_cli_path,
+        steamcmd_config.steamguard_passkey,
+    )
     await install_validate_app(
         steamcmd_config.exe_path,
         install_dir=config.game_install_dir,
@@ -417,7 +420,10 @@ async def install_rs2_sdk(
         config: RS2Config,
         steamcmd_config: SteamCmdConfig,
 ):
-    code = await get_steamguard_code(steamcmd_config.steamguard_cli_path)
+    code = await get_steamguard_code(
+        steamcmd_config.steamguard_cli_path,
+        steamcmd_config.steamguard_passkey,
+    )
     await install_validate_app(
         steamcmd_config.exe_path,
         install_dir=config.game_install_dir,
