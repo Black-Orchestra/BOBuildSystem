@@ -57,7 +57,23 @@ Start-Process -FilePath "python.exe" `
     -Wait `
     -NoNewWindow
 
-# TODO: use bobuild tools to install RS2 server, game and SDK.
+Write-Output "Installing RS2..."
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2" `
+    -NoNewWindow `
+    -Wait
+
+Write-Output "Installing RS2 SDK.."
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2_sdk" `
+    -NoNewWindow `
+    -Wait
+
+Write-Output "Installing RS2 Dedicated Server..."
+Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd/main.py", "install_rs2_server" `
+    -NoNewWindow `
+    -Wait
 
 Write-Output "Setting RS2 server firewall rules..."
 & "$PSScriptRoot\setup\allow_rs2_server_firewall.ps1"
