@@ -11,6 +11,7 @@ from bobuild.utils import get_var
 # logger.remove()
 
 _log_dir = Path(get_var("BO_LOG_DIR", ".")).resolve()
+_log_dir.mkdir(parents=True, exist_ok=True)
 
 logger.add(_log_dir / "bobuild.log", rotation="10 MB", retention=5)
 logger.info("initialized logging")
