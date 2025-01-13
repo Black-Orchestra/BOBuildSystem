@@ -48,6 +48,8 @@ CheckExitCode($LASTEXITCODE)
 Write-Output "Installing SteamCMD..."
 & "$PSScriptRoot\setup\install_steamcmd.ps1"
 # CheckExitCode($LASTEXITCODE) NOTE: skipping this check on purpose!
+# SteamCMD exit codes are unpredictable.
+$LASTEXITCODE = 0
 
 Write-Output "Installing steamguard-cli..."
 & "$PSScriptRoot\setup\install_steamguardcli.ps1"
