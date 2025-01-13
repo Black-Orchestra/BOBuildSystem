@@ -59,7 +59,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-       + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
@@ -133,7 +133,7 @@ CheckExitCode($Proc.ExitCode)
 
 Write-Output "Ensuring Mercurial config is correct..."
 $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/hg.py", "ensure_config" `
+    -ArgumentList "$PSScriptRoot/bobuild/hg.py", "configure" `
     -NoNewWindow `
     -Wait `
     -PassThru
