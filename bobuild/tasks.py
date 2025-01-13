@@ -3,6 +3,9 @@ import datetime
 import logging
 import platform
 import shutil
+from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Annotated
 
 from redis.asyncio import ConnectionPool
@@ -23,6 +26,7 @@ from taskiq_redis import RedisScheduleSource
 import bobuild.git
 import bobuild.hg
 import bobuild.run
+import bobuild.workshop
 from bobuild.config import GitConfig
 from bobuild.config import MercurialConfig
 from bobuild.config import RS2Config
@@ -31,6 +35,8 @@ from bobuild.log import logger
 from bobuild.utils import copy_tree
 from bobuild.utils import get_var
 from bobuild.utils import is_dev_env
+from bobuild.workshop import find_map_names
+from bobuild.workshop import iter_maps
 
 if platform.system() == "Windows":
     # noinspection PyUnresolvedReferences
@@ -42,6 +48,8 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 broker: AsyncBroker
 REDIS_URL: str
+
+_repo_dir = Path(__file__).parent.resolve()
 
 # TODO: just use redis in dev env too?
 if is_dev_env():
@@ -202,6 +210,41 @@ def log_hash_diffs(hashes: tuple[str, str], name: str):
                     name, hashes[0], hashes[1])
 
 
+def prepare_map_for_sws(
+        publishedfileid: int,
+        map_name: str,
+        template_img: Path,
+        template_vdf: Path,
+        staging_dir: Path,
+        content_folder: Path,
+        git_hash: str,
+        hg_pkg_hash: str,
+        hg_maps_hash: str,
+        changenote: str,
+):
+    preview_file = staging_dir / f"BOBetaMapImg_{map_name}.png"
+    bobuild.workshop.draw_map_preview_file(
+        map_name=map_name,
+        template_file=template_img,
+        output_file=preview_file,
+    )
+
+    map_vdf_file = staging_dir / f"{map_name}.vdf"
+
+    bobuild.workshop.write_map_sws_config(
+        out_file=map_vdf_file,
+        template_file=template_vdf,
+        map_name=map_name,
+        publishedfileid=publishedfileid,
+        content_folder=content_folder,
+        preview_file=preview_file,
+        git_hash=git_hash,
+        hg_pkg_hash=hg_pkg_hash,
+        hg_maps_hash=hg_maps_hash,
+        changenote=changenote,
+    )
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 # TODO: we can leave behind long-running garbage processes
@@ -328,6 +371,10 @@ async def check_for_updates(
         # 4. generate report (list number of warnings)
         # 5. upload content to workshop
 
+        git_hash = await bobuild.git.get_local_hash(git_config.repo_path)
+        hg_pkgs_hash = await bobuild.hg.get_local_hash(hg_config.pkg_repo_path)
+        hg_maps_hash = await bobuild.hg.get_local_hash(hg_config.maps_repo_path)
+
         unpub_pkgs = rs2_config.unpublished_dir / "CookedPC/Packages/WW2"
         unpub_maps = rs2_config.unpublished_dir / "CookedPC/Maps/WW2"
         pub_pkgs = rs2_config.published_dir / "CookedPC/Packages/WW2"
@@ -348,6 +395,24 @@ async def check_for_updates(
         pub_maps.mkdir(parents=True, exist_ok=True)
 
         copy_tree(hg_config.pkg_repo_path, unpub_pkgs, "*.upk")
+        # TODO: this is done somewhat manually for now.
+        # Determine directories for other maps automatically.
+        map_to_unpub_dir = {
+            "RRTE-Beach_Invasion_Sim": "BeachInvasionSim",
+        }
+
+        for m in iter_maps(hg_config.maps_repo_path):
+            mn = m.stem
+            if mn in map_to_unpub_dir:
+                map_unpub_dir = unpub_maps / map_to_unpub_dir[mn]
+            else:
+                map_unpub_dir = unpub_maps / m.parent
+
+            logger.info("map '{}': Unpublished dir: '{}'", mn, map_unpub_dir)
+            map_unpub_dir.mkdir(parents=True, exist_ok=True)
+            copy_tree(m.parent, map_unpub_dir, "*.roe")
+
+        # TODO: use UE-Library to find references to required sublevels?
 
         await bobuild.run.vneditor_make(
             rs2_config.rs2_documents_dir,
@@ -380,6 +445,53 @@ async def check_for_updates(
             "SeekFreeShaderCache",
             "WW2GameInfo.DummyObject",
         )
+
+        map_names = find_map_names(pub_maps)
+
+        logger.info("found {} maps for workshop uploads", len(map_names))
+        fs: list[Future] = []
+        with ThreadPoolExecutor() as executor:
+            template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
+            template_vdf = _repo_dir / "workshop/BOBetaMapTemplate.vdf"
+            for map_name in map_names:
+                staging_dir = _repo_dir / "workshop/generated/sws_map_staging/" / map_name
+                staging_dir.mkdir(parents=True, exist_ok=True)
+
+                changenote = fr"""
+Git commit: {git_hash}.
+Mercurial packages commit: {hg_pkgs_hash}.
+Mercurial maps commit: {hg_maps_hash}.
+                """
+
+                publishedfileid = rs2_config.bo_dev_beta_map_ids[map_name]
+
+                # TODO: this path needs fixing!
+                content_folder = pub_maps
+
+                executor.submit(
+                    prepare_map_for_sws,
+                    publishedfileid=publishedfileid,
+                    map_name=map_name,
+                    template_img=template_img,
+                    template_vdf=template_vdf,
+                    staging_dir=staging_dir,
+                    git_hash=git_hash,
+                    hg_pkgs_hash=hg_pkgs_hash,
+                    hg_maps_hash=hg_maps_hash,
+                    changenote=changenote,
+                    content_folder=content_folder,
+                )
+
+        exs: list[str] = []
+        for f in fs:
+            ex = f.exception()
+            if ex:
+                logger.error("future {} failed with error: {}: {}", f, type(ex).__name__, ex)
+                exs.append(str(ex))
+
+        if exs:
+            ex_string = "\n".join(exs)
+            raise RuntimeError("failed to render map preview files: {}", ex_string)
 
         await asyncio.sleep(2 * 60)
         print("DONE!")

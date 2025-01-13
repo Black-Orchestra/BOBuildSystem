@@ -3,6 +3,7 @@ from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
 from pprint import pformat
+from typing import Generator
 
 import vdf
 from PIL import Image
@@ -26,14 +27,21 @@ _glow_y = 4
 _bo_red = (204, 20, 23)
 
 
+def iter_maps(
+        base_dir: Path,
+        prefixes: list[str] | None = None,
+) -> Generator[Path]:
+    if not prefixes:
+        prefixes = ["RRTE", "DRTE"]
+
+    for roe in base_dir.rglob("*.roe"):
+        if (any(roe.name.startswith(p) for p in prefixes)
+                and roe.stat().st_size > 4096 * 1024):
+            yield roe
+
+
 def find_map_names(base_dir: Path) -> set[str]:
-    roes = base_dir.rglob("*.roe")
-    return {
-        str(file.stem) for file in roes
-        if (file.name.startswith("RRTE")
-            or file.name.startswith("DRTE"))
-           and file.stat().st_size > 4096 * 1024
-    }
+    return {str(file.stem) for file in iter_maps(base_dir)}
 
 
 def linear_convert(
@@ -50,8 +58,8 @@ def draw_map_preview_file(
         map_name: str,
         template_file: Path,
         output_file: Path,
-        font_file: Path,
-        font_color: tuple[int, int, int],
+        font_file: Path = _repo_dir / "workshop/FRONTAGE-REGULAR.OTF",
+        font_color: tuple[int, int, int] = _bo_red,
 ):
     logger.info(
         "drawing map preview, map_name={}, template_file={}, output_file={}"
@@ -177,20 +185,25 @@ def write_map_sws_config(
         map_name: str,
         content_folder: Path,
         preview_file: Path,
+        publishedfileid: int,
+        git_hash: str = "null",
+        hg_pkg_hash: str = "null",
+        hg_maps_hash: str = "null",
+        changenote: str = "",
 ):
     template = vdf.loads(template_file.read_text())
-    template["workshopitem"]["publishedfileid"] = 0  # Create new item.
+    template["workshopitem"]["publishedfileid"] = publishedfileid
     template["workshopitem"]["contentfolder"] = str(content_folder.resolve())
     template["workshopitem"]["previewfile"] = str(preview_file)
     title = template["workshopitem"]["title"].format(_mapname=map_name)
     template["workshopitem"]["title"] = title
     desc = template["workshopitem"]["description"].format(
         _mapname=map_name,
-        _git_hash="null",
-        _hg_pkg_hash="null",
-        _hg_maps_hash="null",
+        _git_hash=git_hash,
+        _hg_pkg_hash=hg_pkg_hash,
+        _hg_maps_hash=hg_maps_hash,
     )
-    template["workshopitem"]["changenote"] = "Initial upload of dummy files."
+    template["workshopitem"]["changenote"] = changenote
     template["workshopitem"]["description"] = desc
 
     with out_file.open("w") as f:
@@ -201,7 +214,7 @@ def write_map_sws_config(
 def do_map_first_time_config(
         map_name: str,
 ) -> Path:
-    p = Path(_repo_dir) / "workshop/generated/sws_map_staging/" / map_name
+    p = _repo_dir / "workshop/generated/sws_map_staging/" / map_name
     p.mkdir(parents=True, exist_ok=True)
 
     preview_file = p / f"BOBetaMapImg_{map_name}.png"
@@ -216,12 +229,20 @@ def do_map_first_time_config(
     map_vdf_file = p / f"{map_name}.vdf"
     content_folder = p / "content"
 
+    changenote = r"""Initial upload of dummy files.
+Git commit: null.
+Mercurial packages commit: null.
+Mercurial maps commit: null.
+"""
+
     write_map_sws_config(
         out_file=map_vdf_file,
         template_file=_repo_dir / "workshop/BOBetaMapTemplate.vdf",
         map_name=map_name,
+        publishedfileid=0,  # Create new item.
         content_folder=content_folder,
         preview_file=preview_file,
+        changenote=changenote,
     ),
 
     content_folder.mkdir(parents=True, exist_ok=True)
