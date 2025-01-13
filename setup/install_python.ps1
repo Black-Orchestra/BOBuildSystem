@@ -11,7 +11,7 @@ Invoke-WebRequest "https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.
 
 Write-Host "Running python-3.13.1-amd64.exe..."
 $Proc = Start-Process -FilePath "C:\Temp\python-3.13.1-amd64.exe" `
-    -ArgumentList "/quiet", "InstallAllUsers=0", "AppendPath=1", "Include_freethreaded=1" `
+    -ArgumentList "/quiet", "InstallAllUsers=1", "AppendPath=1", "Include_freethreaded=1" `
     -NoNewWindow `
     -Wait `
     -PassThru
