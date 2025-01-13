@@ -3,6 +3,8 @@ $SteamCMDDir = "$PSScriptRoot\..\bin\steamcmd"
 $SteamCMDZipSavePath = "$SteamCMDDir\steamcmd.zip"
 $SteamCMDExePath = "$SteamCMDDir\steamcmd.exe"
 
+# TODO: get BO_STEAMCMD_INSTALL_DIR from env here!
+
 New-Item -ItemType Directory -Force -Path $SteamCMDDir
 
 Write-Host "Downloading SteamCMD to '$SteamCMDZipSavePath'..."
