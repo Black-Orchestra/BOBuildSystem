@@ -32,6 +32,10 @@ Write-Output "Installing steamguard-cli..."
 
 Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamguard-cli\'!"
 
+Write-Output "Refreshing PATH..."
+$Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
+    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
 $PythonScriptsPath = Join-Path -Path (Split-Path -Path $PythonPath -Parent) -ChildPath "\Scripts\"
