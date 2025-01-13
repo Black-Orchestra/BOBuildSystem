@@ -27,6 +27,9 @@ function CheckExitCode
 
 function SteamAppInstall()
 {
+    # NOTE: using sleeps here to avoid spamming steamcmd less.
+    # There seem to be some errors with hitting the rate limit sometimes.
+
     Write-Output "Installing RS2..."
     $Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2" `
@@ -35,6 +38,8 @@ function SteamAppInstall()
     -PassThru
     CheckExitCode($Proc.ExitCode)
 
+    Write-Debug "Sleeping for 5 seconds..."; Start-Sleep -Seconds 5
+
     Write-Output "Installing RS2 SDK.."
     $Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_sdk" `
@@ -42,6 +47,8 @@ function SteamAppInstall()
     -Wait `
     -PassThru
     CheckExitCode($Proc.ExitCode)
+
+    Write-Debug "Sleeping for 5 seconds..."; Start-Sleep -Seconds 5
 
     Write-Output "Installing RS2 Dedicated Server..."
     $Proc = Start-Process -FilePath "python.exe" `
@@ -156,5 +163,7 @@ $Proc = Start-Process -FilePath "python.exe" `
     -Wait `
     -PassThru
 CheckExitCode($Proc.ExitCode)
+
+SteamAppInstall
 
 Write-Output "Done."
