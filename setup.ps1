@@ -23,27 +23,35 @@ $ErrorActionPreference = "Stop"
 
 Write-Output "Installing Python..."
 & "$PSScriptRoot\setup\install_python.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing Nuget provider..."
 Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing VC Redist..."
 & "$PSScriptRoot\setup\install_vc_redist.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing Git..."
 & "$PSScriptRoot\setup\install_git.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing TortoiseHG..."
 & "$PSScriptRoot\setup\install_tortoisehg.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing UE3ShaderCachePatcherCLI..."
 & "$PSScriptRoot\setup\install_shadercachepatcher.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing SteamCMD..."
 & "$PSScriptRoot\setup\install_steamcmd.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Installing steamguard-cli..."
 & "$PSScriptRoot\setup\install_steamguardcli.ps1"
+CheckExitCode($LASTEXITCODE)
 
 Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamguard-cli\'!"
 
