@@ -26,7 +26,7 @@ else:
     raise NotImplementedError
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True)
 class MercurialConfig:
     @cachedproperty
     def username(self) -> str:
