@@ -6,6 +6,12 @@
 # TODO: this does not work properly on systems with multiple Python versions installed!
 #       - modify install_python.ps1 to use explicit Python installation path?
 
+param (
+    [Parameter(Position = 0, mandatory = $false)]
+    [ValidateSet("FullInstall", "SteamAppInstallOnly")]
+    [string]$Action = "FullInstall"
+)
+
 function CheckExitCode
 {
     param (
@@ -19,7 +25,40 @@ function CheckExitCode
     }
 }
 
+function SteamAppInstall()
+{
+    Write-Output "Installing RS2..."
+    $Proc = Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2" `
+    -NoNewWindow `
+    -Wait `
+    -PassThru
+    CheckExitCode($Proc.ExitCode)
+
+    Write-Output "Installing RS2 SDK.."
+    $Proc = Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_sdk" `
+    -NoNewWindow `
+    -Wait `
+    -PassThru
+    CheckExitCode($Proc.ExitCode)
+
+    Write-Output "Installing RS2 Dedicated Server..."
+    $Proc = Start-Process -FilePath "python.exe" `
+    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_server" `
+    -NoNewWindow `
+    -Wait `
+    -PassThru
+    CheckExitCode($Proc.ExitCode)
+}
+
 $ErrorActionPreference = "Stop"
+
+if ($Action -eq "SteamAppInstallOnly")
+{
+    SteamAppInstall
+    exit $LASTEXITCODE
+}
 
 Write-Output "Installing Python..."
 & "$PSScriptRoot\setup\install_python.ps1"
@@ -107,29 +146,8 @@ $Proc = Start-Process -FilePath "python.exe" `
     -PassThru
 CheckExitCode($Proc.ExitCode)
 
-Write-Output "Installing RS2..."
-$Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2" `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
-CheckExitCode($Proc.ExitCode)
-
-Write-Output "Installing RS2 SDK.."
-$Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_sdk" `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
-CheckExitCode($Proc.ExitCode)
-
-Write-Output "Installing RS2 Dedicated Server..."
-$Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_server" `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
-CheckExitCode($Proc.ExitCode)
+Write-Output "Setting RS2 server firewall rules..."
+& "$PSScriptRoot\setup\allow_rs2_server_firewall.ps1"
 
 Write-Output "Ensuring Mercurial config is correct..."
 $Proc = Start-Process -FilePath "python.exe" `
@@ -138,8 +156,5 @@ $Proc = Start-Process -FilePath "python.exe" `
     -Wait `
     -PassThru
 CheckExitCode($Proc.ExitCode)
-
-Write-Output "Setting RS2 server firewall rules..."
-& "$PSScriptRoot\setup\allow_rs2_server_firewall.ps1"
 
 Write-Output "Done."
