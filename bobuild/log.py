@@ -20,9 +20,6 @@ _default = object()
 def _get_var(name: str, default: T | object = _default) -> str | T:
     if default is _default:
         return os.environ[name]
-
-    if name not in os.environ:
-        logger.info("{} not set in environment, using default: '{}'", name, default)
     return os.environ.get(name, cast(T, default))
 
 
