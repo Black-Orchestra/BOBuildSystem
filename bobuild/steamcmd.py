@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import datetime as dt
 import platform
@@ -17,6 +18,8 @@ from bobuild.log import logger
 from bobuild.run import run_process
 from bobuild.utils import asyncio_run
 from bobuild.utils import redact
+from config import RS2Config
+from config import SteamCmdConfig
 
 # TODO: put these in a config class?
 RS2_APPID = 418460
@@ -340,28 +343,28 @@ async def install_validate_app(
         password: str,
         steamguard_code: str | None = None,
 ) -> None:
-    await run_cmd(
-        steamcmd_path,
+    args = [
         "+force_install_dir", str(install_dir),
-        "+login", username, password,
+        "+login", username
+    ]
+
+    if username == "anonymous":
+        steamguard_code = None
+    else:
+        args.append(password)
+
+    args += [
         f'"+app_update {app_id} validate"',
         "+logoff",
         "+quit",
+    ]
+
+    await run_cmd(
+        steamcmd_path,
+        *args,
         raise_on_error=True,
         steamguard_code=steamguard_code,
     )
-
-
-# async def is_rs2_installed() -> bool:
-#     return await is_app_installed(RS2_GAME_INSTALL_DIR, RS2_APPID)
-#
-#
-# async def is_rs2_sdk_installed() -> bool:
-#     return await is_app_installed(RS2_GAME_INSTALL_DIR, RS2_SDK_APPID)
-#
-#
-# async def is_rs2_server_installed() -> bool:
-#     return await is_app_installed(RS2_SERVER_INSTALL_DIR, RS2_DS_APPID)
 
 
 async def dry_run(steamcmd_path: Path):
@@ -395,18 +398,77 @@ async def get_steamguard_code(
     return out.strip()
 
 
+async def install_rs2(
+        config: RS2Config,
+        steamcmd_config: SteamCmdConfig,
+):
+    code = await get_steamguard_code(steamcmd_config.steamguard_cli_path)
+    await install_validate_app(
+        steamcmd_config.exe_path,
+        install_dir=config.game_install_dir,
+        app_id=RS2_APPID,
+        username=steamcmd_config.username,
+        password=steamcmd_config.password,
+        steamguard_code=code,
+    )
+
+
+async def install_rs2_sdk(
+        config: RS2Config,
+        steamcmd_config: SteamCmdConfig,
+):
+    code = await get_steamguard_code(steamcmd_config.steamguard_cli_path)
+    await install_validate_app(
+        steamcmd_config.exe_path,
+        install_dir=config.game_install_dir,
+        app_id=RS2_SDK_APPID,
+        username=steamcmd_config.username,
+        password=steamcmd_config.password,
+        steamguard_code=code,
+    )
+
+
+async def install_rs2_server(
+        config: RS2Config,
+        steamcmd_config: SteamCmdConfig,
+):
+    await install_validate_app(
+        steamcmd_config.exe_path,
+        install_dir=config.server_install_dir,
+        app_id=RS2_DS_APPID,
+        username="anonymous",
+        password="",
+        steamguard_code=None,
+    )
+
+
 async def main() -> None:
-    pass
+    ap = argparse.ArgumentParser()
 
-    # await install_update_steamcmd()
+    cfg = RS2Config()
+    rs2_game_path = cfg.game_install_dir
+    rs2_server_path = cfg.server_install_dir
+    logger.info("rs2_game_path: '{}'", rs2_game_path)
+    logger.info("rs2_server_path: '{}'", rs2_server_path)
 
-    # rs2_installed = await is_rs2_installed()
-    # rs2_sdk_installed = await is_rs2_sdk_installed()
-    # rs2_server_installed = await is_rs2_server_installed()
-    #
-    # logger.info("rs2_installed={}", rs2_installed)
-    # logger.info("rs2_sdk_installed={}", rs2_sdk_installed)
-    # logger.info("rs2_server_installed={}", rs2_server_installed)
+    action_choices = {
+        "install_rs2": install_rs2,
+        "install_rs2_sdk": install_rs2_sdk,
+        "install_rs2_server": install_rs2_server,
+    }
+    ap.add_argument(
+        "action",
+        choices=action_choices.keys(),
+        help="action to perform",
+    )
+
+    steamcmd_cfg = SteamCmdConfig()
+
+    args = ap.parse_args()
+    action = args.action
+    logger.info("performing action: {}", action)
+    await action_choices[args.action](cfg, steamcmd_cfg)
+    logger.info("exiting")
 
 
 if __name__ == "__main__":
