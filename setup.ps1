@@ -59,7 +59,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-     + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+       + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
@@ -75,6 +75,7 @@ if ( [System.IO.Directory]::Exists($PythonScriptsPath))
     }
 }
 
+# TODO: check if venv exists already?
 Write-Output "Creating Python virtual environment..."
 $Proc = Start-Process -FilePath "python.exe" `
     -ArgumentList "-m", "venv", "venv" `
