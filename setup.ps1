@@ -153,7 +153,7 @@ $Proc = Start-Process -FilePath "python.exe" `
     -PassThru
 CheckExitCode($Proc.ExitCode)
 $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "-m", "pip", "install", "$PSScriptRoot" `
+    -ArgumentList "-m", "pip", "install", "-e", "$PSScriptRoot[dev]" `
     -Wait `
     -NoNewWindow `
     -PassThru
