@@ -96,8 +96,10 @@ else:
 
     broker = ListQueueBroker(
         url=REDIS_URL,
-        result_backend=result_backend,
-        serializer=ORJSONSerializer(),
+    ).with_result_backend(
+        result_backend
+    ).with_serializer(
+        ORJSONSerializer()
     )
 
     redis_source = RedisScheduleSource(
