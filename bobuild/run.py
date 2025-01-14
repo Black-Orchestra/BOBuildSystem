@@ -334,10 +334,11 @@ async def ensure_vneditor_modpackages_config(
     cfg = MultiConfigParser()
     cfg.read(config_file)
 
-    cfg_mod_packages = cfg["ModPackages"].getlist()
+    cfg_mod_packages = cfg["ModPackages"].getlist("ModPackages") or []
     for mod_package in mod_packages:
         if mod_package not in cfg_mod_packages:
-            cfg_mod_packages.append()
+            cfg_mod_packages.append(mod_package)
+    cfg["ModPackages"]["ModPackages"] = "\n".join(cfg_mod_packages)
 
     with config_file.open("w") as f:
         logger.info("writing config file: '{}'", config_file)
