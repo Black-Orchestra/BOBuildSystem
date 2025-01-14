@@ -17,7 +17,11 @@ try
 }
 finally
 {
-    Stop-Process -Id $Proc.Id
+    $Proc = Get-Process -Id $Proc.Id
+    if ($Proc)
+    {
+        Stop-Process -Id $Proc.Id
+    }
 }
 
 exit $Proc.ExitCode
