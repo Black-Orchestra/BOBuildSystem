@@ -12,7 +12,6 @@ from taskiq.schedule_sources import LabelScheduleSource
 from taskiq.serializers import ORJSONSerializer
 from taskiq_pg import AsyncpgResultBackend
 from taskiq_redis import ListQueueBroker
-from taskiq_redis import RedisScheduleSource
 
 from bobuild.log import InterceptHandler
 from bobuild.log import logger
@@ -63,10 +62,12 @@ else:
         ORJSONSerializer()
     )
 
-    source = RedisScheduleSource(
-        url=REDIS_URL,
-        serializer=ORJSONSerializer(),
-    )
+    source = LabelScheduleSource(broker)
+
+    # source = RedisScheduleSource(
+    #     url=REDIS_URL,
+    #     serializer=ORJSONSerializer(),
+    # )
 
     scheduler = TaskiqScheduler(
         broker=broker,
