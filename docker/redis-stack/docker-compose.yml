@@ -3,6 +3,7 @@ services:
     image: redis/redis-stack-server:latest
     ports:
       - "6379:6379"
+      - "8001:8001"
     healthcheck:
       test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
     volumes:
