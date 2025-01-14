@@ -493,10 +493,7 @@ Mercurial maps commit: {hg_maps_hash}.
             ex_string = "\n".join(exs)
             raise RuntimeError("failed to render map preview files: {}", ex_string)
 
-        await asyncio.sleep(2 * 60)
-        print("DONE!")
-        print(context.message)
-        print(context.state)
+        logger.info("task {} done", context.message)
 
     except Exception as e:
         logger.error("error running task: {}: {}: {}",
