@@ -476,7 +476,7 @@ Mercurial maps commit: {hg_maps_hash}.
                     template_vdf=template_vdf,
                     staging_dir=staging_dir,
                     git_hash=git_hash,
-                    hg_pkgs_hash=hg_pkgs_hash,
+                    hg_pkg_hash=hg_pkgs_hash,
                     hg_maps_hash=hg_maps_hash,
                     changenote=changenote,
                     content_folder=content_folder,
