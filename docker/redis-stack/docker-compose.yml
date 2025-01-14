@@ -7,6 +7,7 @@ services:
       test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
     volumes:
       - redis_data:/data
+    restart: on-failure
 
 volumes:
   redis_data:
