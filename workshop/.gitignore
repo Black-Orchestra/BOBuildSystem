@@ -2,3 +2,5 @@ generated/BOBetaGenerated.vdf
 generated/BOBetaMapImgTest.png
 generated/sws_map_staging/*
 !generated/sws_map_staging/.gitkeep
+generated/ww2u_staging/*
+!generated/ww2u_staging/.gitkeep
