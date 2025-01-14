@@ -4,6 +4,7 @@ import platform
 from redis.asyncio import ConnectionPool
 from taskiq import AsyncBroker
 from taskiq import InMemoryBroker
+from taskiq import ScheduleSource
 from taskiq import TaskiqEvents
 from taskiq import TaskiqScheduler
 from taskiq import TaskiqState
@@ -28,6 +29,7 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 broker: AsyncBroker
 scheduler: TaskiqScheduler
+source: ScheduleSource
 REDIS_URL: str
 
 if is_dev_env():
@@ -61,14 +63,14 @@ else:
         ORJSONSerializer()
     )
 
-    redis_source = RedisScheduleSource(
-        REDIS_URL,
+    source = RedisScheduleSource(
+        url=REDIS_URL,
         serializer=ORJSONSerializer(),
     )
 
     scheduler = TaskiqScheduler(
         broker=broker,
-        sources=[redis_source],
+        sources=[source],
     )
 
 
