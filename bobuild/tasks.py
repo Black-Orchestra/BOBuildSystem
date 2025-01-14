@@ -47,6 +47,7 @@ if platform.system() == "Windows":
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 broker: AsyncBroker
+scheduler: TaskiqScheduler
 REDIS_URL: str
 
 _repo_dir = Path(__file__).parent.resolve()
