@@ -85,6 +85,10 @@ Write-Output "Installing VC Redist..."
 & "$PSScriptRoot\setup\install_vc_redist.ps1"
 CheckExitCode($LASTEXITCODE)
 
+Write-Output "Installing DirectX Redist..."
+& "$PSScriptRoot\setup\install_dx_redist.ps1"
+CheckExitCode($LASTEXITCODE)
+
 Write-Output "Installing Git..."
 & "$PSScriptRoot\setup\install_git.ps1"
 CheckExitCode($LASTEXITCODE)
@@ -111,7 +115,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    + "; " + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
