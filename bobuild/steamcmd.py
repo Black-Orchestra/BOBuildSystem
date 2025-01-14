@@ -4,6 +4,7 @@ import datetime as dt
 import platform
 import re
 import tempfile
+import time
 import zipfile
 from functools import partial
 from pathlib import Path
@@ -28,6 +29,8 @@ RS2_SDK_APPID = 418500
 RS2_DS_APPID = 418480
 
 _script_dir = Path(__file__).parent
+
+_USED_CODE = ""
 
 
 @overload
@@ -405,17 +408,33 @@ async def dry_run(steamcmd_path: Path):
 async def get_steamguard_code(
         steamguard_cli_path: Path,
         passkey: str,
+        timeout: float = 60.0,
 ) -> str:
-    out = (await run_process(
-        steamguard_cli_path,
-        "-p", passkey,
-        cwd=steamguard_cli_path.parent,
-        raise_on_error=True,
-        return_output=True,
-        redact=partial(redact, passkey),
-    ))[1]
+    # NOTE: This is a bit of a hack. Since the codes are
+    # one-time use only, we need to make sure we don't
+    # return the same code more than once.
+    global _USED_CODE
 
-    return out.strip()
+    code = None
+
+    to = time.time() + timeout
+    while time.time() < to:
+        code = (await run_process(
+            steamguard_cli_path,
+            "-p", passkey,
+            cwd=steamguard_cli_path.parent,
+            raise_on_error=True,
+            return_output=True,
+            redact=partial(redact, passkey),
+        ))[1].strip()
+        if code != _USED_CODE:
+            break
+
+    if code is None:
+        raise RuntimeError("unable to get steamguard code")
+
+    _USED_CODE = code
+    return _USED_CODE
 
 
 async def install_rs2(
