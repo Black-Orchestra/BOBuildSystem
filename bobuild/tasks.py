@@ -253,6 +253,9 @@ def prepare_map_for_sws(
 #       Additionally, we need to make sure
 # TODO: store PIDs of potentially problematic programs (VNGame.exe)
 #       in Redis behind unique keys?
+# TODO: return a result from this task?
+# TODO: store hashes in metadata so we can retry a failed task for the hashes?
+#       For tasks that begin successfully but then fail for some reason halfway?
 @broker.task(
     schedule=[{"cron": "*/1 * * * *"}],
     timeout=30 * 60,
@@ -280,25 +283,34 @@ async def check_for_updates(
                 "old update in-progress flag was set, "
                 "cleanup was potentially skipped: {}", old_update_timestamp)
 
-        # TODO: ensure hg config is correct every time here?
-        # bobuild.hg.ensure_config(hg_config)
+        bobuild.hg.ensure_config(hg_config)
+        await bobuild.run.ensure_vneditor_modpackages_config(
+            rs2_config=rs2_config,
+            mod_packages=["WW2"],
+        )
 
         clone_tasks = []
 
+        cloned_git = False
         if not await bobuild.git.repo_exists(git_config.repo_path):
             logger.info("git repo does not exist in '{}', cloning", git_config.repo_path)
             git_config.repo_path.mkdir(parents=True, exist_ok=True)
             clone_tasks.append(bobuild.git.clone_repo(git_config.repo_url, git_config.repo_path))
+            cloned_git = True
 
+        cloned_hg_pkgs = False
         if not await bobuild.hg.repo_exists(hg_config.pkg_repo_path):
             logger.info("hg repo does not exist in '{}', cloning", hg_config.pkg_repo_path)
             hg_config.pkg_repo_path.mkdir(parents=True, exist_ok=True)
             clone_tasks.append(bobuild.hg.clone_repo(hg_config.pkg_repo_url, hg_config.pkg_repo_path))
+            cloned_hg_pkgs = True
 
+        cloned_hg_maps = False
         if not await bobuild.hg.repo_exists(hg_config.maps_repo_path):
             logger.info("hg repo does not exist in '{}', cloning", hg_config.maps_repo_path)
             hg_config.pkg_repo_path.mkdir(parents=True, exist_ok=True)
             clone_tasks.append(bobuild.hg.clone_repo(hg_config.maps_repo_url, hg_config.maps_repo_path))
+            cloned_hg_maps = True
 
         if clone_tasks:
             logger.info("running {} clone tasks", len(clone_tasks))
@@ -362,14 +374,12 @@ async def check_for_updates(
             await asyncio.gather(*sync_tasks)
         else:
             logger.info("no repo sync tasks, all up to date")
-            return
-
-        # 0. copy content to documents!
-        # 1. compile code task
-        # 2. list all packages and maps to brew (include the .u file)
-        # 3. brew all content
-        # 4. generate report (list number of warnings)
-        # 5. upload content to workshop
+            if any((cloned_git, cloned_hg_pkgs, cloned_hg_maps)):
+                # TODO: do something here? Log?
+                pass
+            else:
+                logger.info("no further work to be done")
+                return
 
         git_hash = await bobuild.git.get_local_hash(git_config.repo_path)
         hg_pkgs_hash = await bobuild.hg.get_local_hash(hg_config.pkg_repo_path)
@@ -401,12 +411,15 @@ async def check_for_updates(
             "RRTE-Beach_Invasion_Sim": "BeachInvasionSim",
         }
 
+        map_unpub_dirs: dict[str, Path] = {}
         for m in iter_maps(hg_config.maps_repo_path):
             mn = m.stem
             if mn in map_to_unpub_dir:
                 map_unpub_dir = unpub_maps / map_to_unpub_dir[mn]
             else:
                 map_unpub_dir = unpub_maps / m.parent
+
+            map_unpub_dirs[mn] = map_unpub_dir
 
             logger.info("map '{}': Unpublished dir: '{}'", mn, map_unpub_dir)
             map_unpub_dir.mkdir(parents=True, exist_ok=True)
@@ -446,9 +459,13 @@ async def check_for_updates(
             "WW2GameInfo.DummyObject",
         )
 
-        map_names = find_map_names(pub_maps)
+        ww2u_staging_dir = _repo_dir / "workshop/generated/ww2u_staging/"
+        logger.info("preparing main SWS item in '{}'", ww2u_staging_dir)
+        ww2u_staging_dir.mkdir(parents=True, exist_ok=True)
 
+        map_names = find_map_names(pub_maps)
         logger.info("found {} maps for workshop uploads", len(map_names))
+
         fs: list[Future] = []
         with ThreadPoolExecutor() as executor:
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
@@ -463,10 +480,17 @@ Mercurial packages commit: {hg_pkgs_hash}.
 Mercurial maps commit: {hg_maps_hash}.
                 """
 
-                publishedfileid = rs2_config.bo_dev_beta_map_ids[map_name]
+                try:
+                    publishedfileid = rs2_config.bo_dev_beta_map_ids[map_name]
+                except KeyError:
+                    logger.warning("no SWS ID for map '{}', skipping", map_name)
+                    continue
 
-                # TODO: this path needs fixing!
-                content_folder = pub_maps
+                try:
+                    content_folder = map_unpub_dirs[map_name]
+                except KeyError:
+                    logger.error("failed to determine contentfolder for map '{}'", map_name)
+                    continue
 
                 executor.submit(
                     prepare_map_for_sws,
@@ -488,10 +512,14 @@ Mercurial maps commit: {hg_maps_hash}.
             if ex:
                 logger.error("future {} failed with error: {}: {}", f, type(ex).__name__, ex)
                 exs.append(str(ex))
-
         if exs:
             ex_string = "\n".join(exs)
             raise RuntimeError("failed to render map preview files: {}", ex_string)
+
+        # TODO: it's possible a new map is added to the repo, which is not listed
+        #   in map_ids_factory(). Is there a nice way to automate creation of new
+        #   workshop items? Probably not? At the very least, this task should post
+        #   a notification when such a map is found.
 
         logger.info("task {} done", context.message)
 
