@@ -12,8 +12,8 @@ license-files = { paths = ["LICENSE"] }
 keywords = []
 authors = [
     { name = "Tuomo Kriikkula", email = "tuokri@tuta.io" },
-    { name = "Name2", email = "todo2@todo.todo" },
-    { name = "Name3", email = "todo3@todo.todo" },
+    # { name = "Name2", email = "todo2@todo.todo" },
+    # { name = "Name3", email = "todo3@todo.todo" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

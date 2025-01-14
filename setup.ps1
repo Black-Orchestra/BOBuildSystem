@@ -36,30 +36,38 @@ function SteamAppInstall()
 
     Write-Output "Installing RS2..."
     $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2" `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
+        -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2" `
+        -NoNewWindow `
+        -Wait `
+        -PassThru
     CheckExitCode($Proc.ExitCode)
 
     Write-Debug "Sleeping for 5 seconds..."; Start-Sleep -Seconds 5
 
     Write-Output "Installing RS2 SDK.."
     $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_sdk" `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
+        -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_sdk" `
+        -NoNewWindow `
+        -Wait `
+        -PassThru
     CheckExitCode($Proc.ExitCode)
 
     Write-Debug "Sleeping for 5 seconds..."; Start-Sleep -Seconds 5
 
     Write-Output "Installing RS2 Dedicated Server..."
     $Proc = Start-Process -FilePath "python.exe" `
-    -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_server" `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
+        -ArgumentList "$PSScriptRoot/bobuild/steamcmd.py", "install_rs2_server" `
+        -NoNewWindow `
+        -Wait `
+        -PassThru
+    CheckExitCode($Proc.ExitCode)
+
+    Write-Output "Dry-running VNEditor.exe to ensure config files exist..."
+    $Proc = Start-Process -FilePath "python.exe" `
+        -ArgumentList "$PSScriptRoot/bobuild/run.py", "configure_sdk" `
+        -NoNewWindow `
+        -Wait `
+        -PassThru
     CheckExitCode($Proc.ExitCode)
 }
 

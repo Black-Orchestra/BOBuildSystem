@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import re
 from pathlib import Path
@@ -17,6 +18,7 @@ from hachiko import AIOWatchdog
 
 from bobuild.config import RS2Config
 from bobuild.log import logger
+from bobuild.multiconfig import MultiConfigParser
 from bobuild.utils import asyncio_run
 
 LOG_RE = re.compile(r"^\[[\d.]+]\s(\w+):(.*)$")
@@ -302,14 +304,50 @@ async def patch_shader_cache(
     )
 
 
-async def main() -> None:
-    cfg = RS2Config()
+async def ensure_vneditor_modpackages_config(
+        rs2_config: RS2Config,
+        mod_packages: list[str],
+):
+    docs_dir = rs2_config.rs2_documents_dir
 
-    await vneditor_make(
-        cfg.rs2_documents_dir,
-        cfg.vneditor_exe,
+    # Dry-run to make sure config files exist.
+    await run_vneditor(
+        rs2_documents_dir=docs_dir,
+        vneditor_path=rs2_config.vneditor_exe,
+        command=""
     )
 
+    config_file = docs_dir / "ROGame/Config/ROEditor.ini"
+    cfg = MultiConfigParser()
+    cfg.read(config_file)
+
+    cfg_mod_packages = cfg["ModPackages"].getlist()
+    for mod_package in mod_packages:
+        if mod_package not in cfg_mod_packages:
+            cfg_mod_packages.append()
+
+    with config_file.open("w") as f:
+        logger.info("writing config file: '{}'", config_file)
+        cfg.write(f, space_around_delimiters=False)
+
+
+async def main() -> None:
+    ap = argparse.ArgumentParser()
+    rs2_cfg = RS2Config()
+
+    action_choices = {
+        "configure_sdk": ensure_vneditor_modpackages_config,
+    }
+    ap.add_argument(
+        "action",
+        choices=action_choices.keys(),
+        help="action to perform",
+    )
+
+    args = ap.parse_args()
+    action = args.action
+    logger.info("performing action: {}", action)
+    action_choices[args.action](rs2_cfg, mod_packages=["WW2"])
     logger.info("exiting")
 
 
