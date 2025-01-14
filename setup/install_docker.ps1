@@ -1,3 +1,10 @@
+$Docker = Get-Package "Docker Desktop" -ErrorAction SilentlyContinue
+if ($Docker)
+{
+    Write-Host "Docker already installed."
+    exit $LASTEXITCODE
+}
+
 New-Item -ItemType Directory -Force -Path "C:\Temp\"
 
 Write-Host "Downloading DockerDesktopInstaller.exe..."

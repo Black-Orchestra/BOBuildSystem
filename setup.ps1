@@ -1,5 +1,5 @@
 # Installs all dependencies and creates a Python production
-# virtual environment in the repo root called 'bo_venv'.
+# virtual environment in the repo root called 'venv'.
 
 # TODO: can we make this runnable as non-admin?
 
@@ -111,7 +111,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-       + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
