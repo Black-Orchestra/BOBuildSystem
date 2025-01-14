@@ -314,12 +314,6 @@ async def first_time_upload_all_maps(
 
     logger.info("{}", pformat(name_to_id))
 
-    # 1. find list of maps in published?
-    # 2. generate .vdf files for maps
-    # 3. render workshop preview images
-    # 4. upload maps (WITH EMPTY FILES!)
-    # 5. print {map_name -> sws_id} dict
-
 
 async def main() -> None:
     ap = argparse.ArgumentParser()
