@@ -71,6 +71,7 @@ async def run_cmd(
     """
 
     steamcmd_args = [
+        "log_files_always_flush", "1",
         *args,
     ]
 
