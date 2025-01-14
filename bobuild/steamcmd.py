@@ -14,17 +14,20 @@ import httpx
 import tqdm
 import vdf
 
+from bobuild.config import RS2Config
+from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
 from bobuild.run import run_process
 from bobuild.utils import asyncio_run
+from bobuild.utils import kill_process_tree
 from bobuild.utils import redact
-from config import RS2Config
-from config import SteamCmdConfig
 
 # TODO: put these in a config class?
 RS2_APPID = 418460
 RS2_SDK_APPID = 418500
 RS2_DS_APPID = 418480
+
+_script_dir = Path(__file__).parent
 
 
 @overload
@@ -83,39 +86,58 @@ async def run_cmd(
     else:
         logger.info("running SteamCMD command: '{}'", steamcmd_args)
 
-    proc = await asyncio.create_subprocess_exec(
-        str(steamcmd_path.resolve()),
-        *steamcmd_args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    # NOTE: we have to run SteamCMD through a PowerShell script
+    # because for some unknown reason running it directly through
+    # create_subprocess_exec or create_subprocess_shell causes it
+    # to exit almost immediately without running the desired commands!
+    script = str(_script_dir / "ps/steamcmd.ps1")
+    args_str = " ".join(steamcmd_args)
 
-    all_out = []
-    all_err = []
+    proc: asyncio.subprocess.Process | None = None
+    try:
 
-    if not proc.stdout:
-        raise RuntimeError(f"process has no stdout: {proc}")
-    if not proc.stderr:
-        raise RuntimeError(f"process has no stderr: {proc}")
+        proc = await asyncio.create_subprocess_exec(
+            f"powershell.exe",
+            "-File", script,
+            "-SteamCMDExePath", str(steamcmd_path),
+            "-Args", args_str,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(steamcmd_path.parent.resolve()),
+        )
 
-    while True:
-        if proc.stdout.at_eof() and proc.stderr.at_eof():
-            break
+        all_out = []
+        all_err = []
 
-        out = (await proc.stdout.readline()
-               ).decode("utf-8", errors="replace").rstrip()
-        if out:
-            logger.info("SteamCMD stdout: {}", out)
-            if return_output:
-                all_out.append(out)
-        err = (await proc.stderr.readline()
-               ).decode("utf-8", errors="replace").rstrip()
-        if err:
-            logger.info("SteamCMD stderr: {}", err)
-            if return_output:
-                all_err.append(err)
+        if not proc.stdout:
+            raise RuntimeError(f"process has no stdout: {proc}")
+        if not proc.stderr:
+            raise RuntimeError(f"process has no stderr: {proc}")
 
-    ec = await proc.wait()
+        while True:
+            if proc.stdout.at_eof() and proc.stderr.at_eof():
+                break
+
+            out = (await proc.stdout.readline()
+                   ).decode("utf-8", errors="replace").rstrip()
+            if out:
+                logger.info("SteamCMD stdout: {}", out)
+                if return_output:
+                    all_out.append(out)
+            err = (await proc.stderr.readline()
+                   ).decode("utf-8", errors="replace").rstrip()
+            if err:
+                logger.info("SteamCMD stderr: {}", err)
+                if return_output:
+                    all_err.append(err)
+
+        ec = await proc.wait()
+
+    except Exception:
+        if proc:
+            kill_process_tree(proc.pid)
+        raise
+
     logger.info("SteamCMD command exited with code: {}", ec)
 
     if raise_on_error and ec != 0:
@@ -353,7 +375,7 @@ async def install_validate_app(
         args.append(password)
 
     args += [
-        f'"+app_update {app_id} validate"',
+        f"+app_update {app_id} validate",
         "+quit",
     ]
 

@@ -10,6 +10,8 @@ from typing import Coroutine
 from typing import TypeVar
 from typing import cast
 
+import psutil
+
 from bobuild.log import logger
 
 T = TypeVar("T")
@@ -78,3 +80,15 @@ def copy_tree(
         ex = future.exception()
         if ex:
             logger.error("future: {}: error: {}", future, ex)
+
+
+def kill_process_tree(pid: int) -> None:
+    try:
+        proc = psutil.Process(pid)
+        children = proc.children(recursive=True)
+        for child in children:
+            child.terminate()
+        proc.terminate()
+    except psutil.Error as e:
+        logger.info("cannot kill process tree of: {}: {}: {}",
+                    pid, type(e).__name__, e)
