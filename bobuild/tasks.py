@@ -84,7 +84,7 @@ if is_dev_env():
         return _update_timestamp is not None
 else:
     REDIS_URL = get_var("BO_REDIS_URL")
-    PG_URL = get_var("BO_POSTRGRES_URL")
+    PG_URL = get_var("BO_POSTGRES_URL")
 
     result_backend: AsyncpgResultBackend = AsyncpgResultBackend(
         dsn=PG_URL,
