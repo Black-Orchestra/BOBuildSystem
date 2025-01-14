@@ -30,6 +30,7 @@ class LogEventHandler(AIOEventHandler):
             stop_event: asyncio.Event,
             log_file: Path,
             loop: asyncio.AbstractEventLoop | None = None,
+            extra_log_exit_strings: list[str] | None = None,
     ):
         super().__init__(loop=loop)
 
@@ -40,6 +41,7 @@ class LogEventHandler(AIOEventHandler):
         self._pos = 0
         self._warnings: list[str] = []
         self._errors: list[str] = []
+        self._extra_log_exit_strings = extra_log_exit_strings or []
 
     @property
     def warnings(self) -> list[str]:
@@ -91,6 +93,11 @@ class LogEventHandler(AIOEventHandler):
 
                 if "Log file closed" in line:
                     log_end = True
+                if self._extra_log_exit_strings and not log_end:
+                    for extra in self._extra_log_exit_strings:
+                        if extra in line:
+                            log_end = True
+                            break
 
             if log_end:
                 logger.info("setting stop event")
@@ -217,11 +224,16 @@ async def run_vneditor(
         vneditor_path: Path,
         command: str,
         *args: str,
+        extra_log_exit_strings: list[str] | None = None,
 ) -> None:
     stop_event = asyncio.Event()
     logs_dir = rs2_documents_dir / "ROGame/Logs"
     log = logs_dir / "Launch.log"
-    handler = LogEventHandler(stop_event, log)
+    handler = LogEventHandler(
+        stop_event=stop_event,
+        log_file=log,
+        extra_log_exit_strings=extra_log_exit_strings,
+    )
     watch = AIOWatchdog(
         path=logs_dir,
         recursive=False,
@@ -314,7 +326,8 @@ async def ensure_vneditor_modpackages_config(
     await run_vneditor(
         rs2_documents_dir=docs_dir,
         vneditor_path=rs2_config.vneditor_exe,
-        command=""
+        command="",
+        extra_log_exit_strings=["appRequestExit"],
     )
 
     config_file = docs_dir / "ROGame/Config/ROEditor.ini"
