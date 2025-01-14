@@ -100,7 +100,7 @@ async def run_cmd(
     proc: asyncio.subprocess.Process | None = None
     try:
         proc = await asyncio.create_subprocess_exec(
-            f"powershell.exe",
+            "powershell.exe",
             "-ExecutionPolicy", "ByPass",
             "-File", script,
             "-SteamCMDExePath", str(steamcmd_path),

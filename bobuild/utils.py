@@ -23,7 +23,7 @@ def asyncio_run(coro: Coroutine[Any, Any, T]) -> T:
     if platform.system() == "Windows":
         # noinspection PyUnresolvedReferences
         import winloop  # type: ignore[import-not-found]
-        # winloop.install()
+        winloop.install()
         return asyncio.run(coro)
     else:
         # noinspection PyUnresolvedReferences
