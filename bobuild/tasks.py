@@ -54,21 +54,21 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
         if task.task_name != self.unique_task_name:
-            return await super().pre_send(task)
+            return
 
         if self.pool is None:
-            return await super().pre_send(task)
+            return
 
         key = f"taskiq_unique:{self.unique_task_name}"
 
         if await self.pool.get(key):
             logger.info("task {} is already running, not starting a new one", task.task_name)
             task.task_name = "bobuild.tasks_bo.bo_dummy_task"
-            return await super().pre_send(task)
+            return
         else:
             await self.pool.set(key, 1, ex=self.expiration)
 
-        return await super().pre_send(task)
+        return
 
     @override
     async def shutdown(self):
