@@ -1,17 +1,23 @@
 import logging
 import platform
+from typing import Any
 
 from redis.asyncio import ConnectionPool
+from redis.asyncio import Redis
 from taskiq import AsyncBroker
 from taskiq import InMemoryBroker
 from taskiq import ScheduleSource
 from taskiq import TaskiqEvents
+from taskiq import TaskiqMessage
+from taskiq import TaskiqMiddleware
+from taskiq import TaskiqResult
 from taskiq import TaskiqScheduler
 from taskiq import TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq.serializers import ORJSONSerializer
 from taskiq_pg import AsyncpgResultBackend
 from taskiq_redis import ListQueueBroker
+from typing_extensions import override
 
 from bobuild.log import InterceptHandler
 from bobuild.log import logger
@@ -26,6 +32,58 @@ if platform.system() == "Windows":
 
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
+
+# https://github.com/taskiq-python/taskiq/issues/271
+class UniqueTaskMiddleware(TaskiqMiddleware):
+    def __init__(
+            self,
+            redis_url: str | None = None,
+            expiration: int = 60 * 60,
+            unique_task_name: str | None = None,  # TODO: take a list here if needed?
+    ) -> None:
+        # TODO: when redis_url is not set, use in-memory dict!
+
+        super().__init__()
+
+        self.expiration = expiration
+        self.unique_task_name = unique_task_name
+        if redis_url is not None:
+            self.pool: Redis | None = Redis.from_url(redis_url)
+
+    @override
+    async def pre_send(self, message: TaskiqMessage) -> TaskiqMessage:
+        if message.task_name != self.unique_task_name:
+            return message
+
+        if self.pool is None:
+            return message
+
+        key = f"taskiq_unique:{self.unique_task_name}"
+
+        if await self.pool.get(key):
+            logger.info("task {} is already running, not starting a new one", message.task_name)
+            # This is a workaround for the problem mentioned in taskiq #271.
+            message.task_name = "bo_dummy_task"
+        else:
+            await self.pool.set(key, 1, ex=self.expiration)
+
+        return message
+
+    @override
+    async def post_save(
+            self,
+            message: TaskiqMessage,
+            _: TaskiqResult[Any],
+    ) -> None:
+        if message.task_name == self.unique_task_name:
+            await self.pool.delete(f"taskiq_unique:{message.task_name}")
+
+    @override
+    async def shutdown(self):
+        if self.pool is not None:
+            await self.pool.close()
+
+
 broker: AsyncBroker
 scheduler: TaskiqScheduler
 source: ScheduleSource
@@ -34,7 +92,10 @@ REDIS_URL: str
 if is_dev_env():
     logger.info("using InMemoryBroker in development environment")
 
-    broker = InMemoryBroker()
+    broker = InMemoryBroker(
+    ).with_middlewares(UniqueTaskMiddleware(
+        unique_task_name="bobuild.tasks.check_for_updates",
+    ))
 
     source = LabelScheduleSource(broker)
 
@@ -60,6 +121,11 @@ else:
         result_backend
     ).with_serializer(
         ORJSONSerializer()
+    ).with_middlewares(
+        UniqueTaskMiddleware(
+            redis_url=REDIS_URL,
+            unique_task_name="bobuild.tasks.check_for_updates",
+        ),
     )
 
     source = LabelScheduleSource(broker)

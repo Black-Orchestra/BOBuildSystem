@@ -170,6 +170,14 @@ def prepare_map_for_sws(
     )
 
 
+@broker.task(
+    timeout=10,
+    task_name="bo_dummy_task",
+)
+async def bo_dummy_task():
+    logger.info("running dummy task to do nothing")
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 # TODO: we can leave behind long-running garbage processes
@@ -191,6 +199,8 @@ async def check_for_updates(
         git_config: GitConfig = TaskiqDepends(git_config_dep),
         rs2_config: RS2Config = TaskiqDepends(rs2_config_dep),
 ) -> None:
+    started_updating = False
+
     logger.info("checking for updates")
 
     try:
@@ -200,6 +210,7 @@ async def check_for_updates(
             return
 
         # Get task ID here, store it in DB and set in-progress state.
+        started_updating = True
 
         # TODO: do something with this?
         old_update_timestamp = await set_update_in_progress(True)
@@ -453,4 +464,5 @@ Mercurial maps commit: {hg_maps_hash}.
                      context.message, type(e).__name__, e)
         raise
     finally:
-        await set_update_in_progress(False)
+        if started_updating:
+            await set_update_in_progress(False)
