@@ -21,7 +21,7 @@ New-Item $DxWebSetupTemp -ItemType Directory -ErrorAction SilentlyContinue
 
 Write-Host "Running dxwebsetup.exe..."
 Start-Process -FilePath $DX_WEB_SETUP `
-    -NoNeWindow `
+    -NoNewWindow `
     -Wait `
     -ArgumentList "/Q", "/T:$DxWebSetupTemp"
 
