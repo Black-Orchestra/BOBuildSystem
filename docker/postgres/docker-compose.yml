@@ -6,7 +6,8 @@ services:
     volumes:
       - "postgresql_data:/bitnami/postgresql"
     environment:
-      POSTGRESQL_POSTGRES_PASSWORD: postgresql_secret_password
+      POSTGRESQL_PASSWORD: postgresql_secret_password
+      POSTGRESQL_POSTGRES_PASSWORD: postgresql_postgres_secret_password
     restart: on-failure
 
 volumes:
