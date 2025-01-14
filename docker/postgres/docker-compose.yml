@@ -6,6 +6,7 @@ services:
     volumes:
       - "postgresql_data:/bitnami/postgresql"
     environment:
+      POSTGRESQL_MAX_CONNECTIONS: 500
       POSTGRESQL_DATABASE: postgres
       POSTGRESQL_USERNAME: postgres
       POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
