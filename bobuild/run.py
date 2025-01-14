@@ -347,7 +347,7 @@ async def main() -> None:
     args = ap.parse_args()
     action = args.action
     logger.info("performing action: {}", action)
-    action_choices[args.action](rs2_cfg, mod_packages=["WW2"])
+    await action_choices[args.action](rs2_cfg, mod_packages=["WW2"])
     logger.info("exiting")
 
 
