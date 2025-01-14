@@ -4,6 +4,9 @@ services:
     ports:
       - "6379:6379"
       - "8001:8001"
+    environment:
+      REDIS_PASSWORD: redis_password_secret
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD}"
     healthcheck:
       test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
     volumes:
