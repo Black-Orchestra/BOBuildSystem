@@ -1,6 +1,7 @@
 import inspect
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import TypeVar
 from typing import cast
@@ -26,7 +27,27 @@ def _get_var(name: str, default: T | object = _default) -> str | T:
 _log_dir = Path(_get_var("BO_LOG_DIR", ".")).resolve()
 _log_dir.mkdir(parents=True, exist_ok=True)
 
-logger.add(_log_dir / "bobuild.log", rotation="10 MB", retention=5)
+logger.remove()
+
+_format = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> |"
+    " <level>{level: <8}</level> | {process.id: <8} |"
+    " <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
+    " - <level>{message}</level>"
+)
+
+logger.add(
+    sys.stdout,
+    format=_format,
+)
+
+logger.add(
+    _log_dir / "bobuild.log",
+    rotation="10 MB",
+    retention=5,
+    format=_format,
+)
+
 logger.info("initialized logging")
 
 
