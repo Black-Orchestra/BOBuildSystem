@@ -17,10 +17,10 @@ try
 }
 finally
 {
-    $Proc = Get-Process -Id $Proc.Id
+    $Proc = Get-Process -Id $Proc.Id -ErrorAction SilentlyContinue
     if ($Proc)
     {
-        Stop-Process -Id $Proc.Id
+        Stop-Process -Id $Proc.Id -ErrorAction SilentlyContinue
     }
 }
 
