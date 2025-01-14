@@ -38,6 +38,9 @@ async def run_cmd(
     git_args = [
         *args,
     ]
+
+    logger.info("running git command: '{}', cwd={}", git_args, cwd)
+
     proc = await asyncio.create_subprocess_exec(
         "git",
         *git_args,
