@@ -158,6 +158,7 @@ else:
 
     source = UniqueLabelScheduleSource(
         broker,
+        redis_url=REDIS_URL,
         unique_task_name="bobuild.tasks_bo.check_for_updates",
     )
 
