@@ -185,16 +185,12 @@ async def run_process(
         out = (await wait_for(proc.stdout.readline(), b"", timeout=timeout)
                ).decode("utf-8", errors="replace").rstrip()
         if out:
-            if redact is not None:
-                out = redact(out)
             logger.info("{} stdout: {}", pn, out)
             if return_output:
                 all_out.append(out)
         err = (await wait_for(proc.stderr.readline(), b"", timeout=timeout)
                ).decode("utf-8", errors="replace").rstrip()
         if err:
-            if redact is not None:
-                err = redact(err)
             logger.info("{} stderr: {}", pn, err)
             if return_output:
                 all_err.append(err)
