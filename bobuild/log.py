@@ -25,11 +25,12 @@ def _get_var(name: str, default: T | object = _default) -> str | T:
 
 
 _log_dir = Path(_get_var("BO_LOG_DIR", ".")).resolve()
+_log_file = _log_dir / _get_var("BO_LOG_FILE", "bobuild.log")
 _log_dir.mkdir(parents=True, exist_ok=True)
 
 logger.remove()
 
-_format = (
+bo_log_format = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> |"
     " <level>{level: <8}</level> | {process.id: <8} |"
     " <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
@@ -38,14 +39,15 @@ _format = (
 
 logger.add(
     sys.stdout,
-    format=_format,
+    format=bo_log_format,
 )
 
 logger.add(
-    _log_dir / "bobuild.log",
+    _log_file,
     rotation="10 MB",
     retention=5,
-    format=_format,
+    format=bo_log_format,
+    enqueue=True,
 )
 
 logger.info("initialized logging")
