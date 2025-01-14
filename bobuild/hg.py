@@ -216,13 +216,6 @@ async def main() -> None:
     action_choices[args.action]()
     logger.info("exiting")
 
-    # exists = await repo_exists(HG_PKG_REPO_PATH)
-    # logger.info("hg repo exists: {}", exists)
-    # repo_inc = await incoming(HG_PKG_REPO_PATH)
-    # logger.info("hg repo has incoming: {}", repo_inc)
-    # await hg_sync_packages()
-    # await hg_sync_maps()
-
 
 if __name__ == "__main__":
     asyncio_run(main())
