@@ -23,7 +23,7 @@ def asyncio_run(coro: Coroutine[Any, Any, T]) -> T:
     if platform.system() == "Windows":
         # noinspection PyUnresolvedReferences
         import winloop  # type: ignore[import-not-found]
-        winloop.install()
+        # winloop.install()
         return asyncio.run(coro)
     else:
         # noinspection PyUnresolvedReferences
@@ -82,13 +82,27 @@ def copy_tree(
             logger.error("future: {}: error: {}", future, ex)
 
 
-def kill_process_tree(pid: int) -> None:
+async def kill_process_tree(pid: int) -> None:
     try:
         proc = psutil.Process(pid)
+        logger.info("killing process tree: {}", proc)
         children = proc.children(recursive=True)
+
         for child in children:
             child.terminate()
         proc.terminate()
+
+        await asyncio.sleep(0.5)
+
+        for child in children:
+            try:
+                child.kill()
+            except psutil.NoSuchProcess:
+                pass
+        try:
+            proc.kill()
+        except psutil.NoSuchProcess:
+            pass
     except psutil.Error as e:
         logger.info("cannot kill process tree of: {}: {}: {}",
                     pid, type(e).__name__, e)

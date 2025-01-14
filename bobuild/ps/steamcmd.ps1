@@ -6,10 +6,18 @@ param (
     [String]$Args
 )
 
-$Proc = Start-Process -FilePath "$SteamCMDExePath" `
-    -ArgumentList $Args `
-    -NoNewWindow `
-    -Wait `
-    -PassThru
+try
+{
+    $Proc = Start-Process -FilePath "$SteamCMDExePath" `
+        -ArgumentList $Args `
+        -NoNewWindow `
+        -PassThru
+
+    Wait-Process -Id $Proc.Id
+}
+finally
+{
+    Stop-Process -Id $Proc.Id
+}
 
 exit $Proc.ExitCode

@@ -95,9 +95,9 @@ async def run_cmd(
 
     proc: asyncio.subprocess.Process | None = None
     try:
-
         proc = await asyncio.create_subprocess_exec(
             f"powershell.exe",
+            "-ExecutionPolicy", "ByPass",
             "-File", script,
             "-SteamCMDExePath", str(steamcmd_path),
             "-Args", args_str,
@@ -133,9 +133,10 @@ async def run_cmd(
 
         ec = await proc.wait()
 
-    except Exception:
+    except (KeyboardInterrupt, Exception, asyncio.CancelledError) as e:
+        logger.error("error: {}: {}", type(e).__name__, e)
         if proc:
-            kill_process_tree(proc.pid)
+            await kill_process_tree(proc.pid)
         raise
 
     logger.info("SteamCMD command exited with code: {}", ec)
