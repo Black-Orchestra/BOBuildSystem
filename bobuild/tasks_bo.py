@@ -52,7 +52,7 @@ else:
         if updating:
             get_task = await get_val.kiq("bo_check_for_updates_running")
             get_result = await get_task.wait_result()
-            get_result.raise_for_result()
+            get_result.raise_for_error()
             old_timeout = get_result.return_value
             if old_timeout is not None:
                 ret = float(old_timeout)
