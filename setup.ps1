@@ -67,6 +67,10 @@ if ($Action -eq "SteamAppInstallOnly")
     exit $LASTEXITCODE
 }
 
+Write-Output "Installing Docker..."
+& "$PSScriptRoot\setup\install_docker.ps1"
+CheckExitCode($LASTEXITCODE)
+
 Write-Output "Installing Python..."
 & "$PSScriptRoot\setup\install_python.ps1"
 CheckExitCode($LASTEXITCODE)
