@@ -12,6 +12,10 @@ param (
     [string]$Action = "FullInstall"
 )
 
+# https://github.com/PowerShell/PowerShell/issues/2138
+$ProgressPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop"
+
 function CheckExitCode
 {
     param (
@@ -58,8 +62,6 @@ function SteamAppInstall()
     -PassThru
     CheckExitCode($Proc.ExitCode)
 }
-
-$ErrorActionPreference = "Stop"
 
 if ($Action -eq "SteamAppInstallOnly")
 {
@@ -109,7 +111,7 @@ Write-Output "Install steamguard-cli maFiles manually in '${Env:APPDATA}\steamgu
 
 Write-Output "Refreshing PATH..."
 $Env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") `
-    + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+       + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
 Write-Output "Ensuring Python Scripts are in PATH..."
 $PythonPath = (Get-Command python).Source
