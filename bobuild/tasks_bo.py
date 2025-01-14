@@ -172,7 +172,7 @@ def prepare_map_for_sws(
 
 @broker.task(
     timeout=10,
-    task_name="bo_dummy_task",
+    task_name="bobuild.tasks_bo.bo_dummy_task",
 )
 async def bo_dummy_task():
     logger.info("running dummy task to do nothing")
@@ -192,6 +192,7 @@ async def bo_dummy_task():
 @broker.task(
     schedule=[{"cron": "*/1 * * * *"}],
     timeout=30 * 60,
+    task_name="bobuild.tasks_bo.check_for_updates",
 )
 async def check_for_updates(
         context: Annotated[Context, TaskiqDepends()],

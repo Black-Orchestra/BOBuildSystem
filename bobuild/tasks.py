@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 from taskiq import AsyncBroker
 from taskiq import InMemoryBroker
 from taskiq import ScheduleSource
+from taskiq import ScheduledTask
 from taskiq import TaskiqEvents
 from taskiq import TaskiqMessage
 from taskiq import TaskiqMiddleware
@@ -33,6 +34,48 @@ if platform.system() == "Windows":
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 
+class UniqueLabelScheduleSource(LabelScheduleSource):
+    def __init__(
+            self,
+            _broker: AsyncBroker,
+            redis_url: str | None = None,
+            expiration: int = 60 * 60,
+            unique_task_name: str | None = None,  # TODO: take a list here if needed?
+    ) -> None:
+        # TODO: when redis_url is not set, use in-memory dict!
+
+        super().__init__(_broker)
+
+        self.expiration = expiration
+        self.unique_task_name = unique_task_name
+        if redis_url is not None:
+            self.pool: Redis | None = Redis.from_url(redis_url)
+
+    @override
+    async def pre_send(self, task: ScheduledTask) -> None:
+        if task.task_name != self.unique_task_name:
+            return await super().pre_send(task)
+
+        if self.pool is None:
+            return await super().pre_send(task)
+
+        key = f"taskiq_unique:{self.unique_task_name}"
+
+        if await self.pool.get(key):
+            logger.info("task {} is already running, not starting a new one", task.task_name)
+            task.task_name = "bobuild.tasks_bo.bo_dummy_task"
+            return await super().pre_send(task)
+        else:
+            await self.pool.set(key, 1, ex=self.expiration)
+
+        return await super().pre_send(task)
+
+    @override
+    async def shutdown(self):
+        if self.pool is not None:
+            await self.pool.close()
+
+
 # https://github.com/taskiq-python/taskiq/issues/271
 class UniqueTaskMiddleware(TaskiqMiddleware):
     def __init__(
@@ -51,31 +94,13 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
             self.pool: Redis | None = Redis.from_url(redis_url)
 
     @override
-    async def pre_send(self, message: TaskiqMessage) -> TaskiqMessage:
-        if message.task_name != self.unique_task_name:
-            return message
-
-        if self.pool is None:
-            return message
-
-        key = f"taskiq_unique:{self.unique_task_name}"
-
-        if await self.pool.get(key):
-            logger.info("task {} is already running, not starting a new one", message.task_name)
-            # This is a workaround for the problem mentioned in taskiq #271.
-            message.task_name = "bo_dummy_task"
-        else:
-            await self.pool.set(key, 1, ex=self.expiration)
-
-        return message
-
-    @override
     async def post_save(
             self,
             message: TaskiqMessage,
             _: TaskiqResult[Any],
     ) -> None:
         if message.task_name == self.unique_task_name:
+            logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
             await self.pool.delete(f"taskiq_unique:{message.task_name}")
 
     @override
@@ -94,10 +119,13 @@ if is_dev_env():
 
     broker = InMemoryBroker(
     ).with_middlewares(UniqueTaskMiddleware(
-        unique_task_name="bobuild.tasks.check_for_updates",
+        unique_task_name="bobuild.tasks_bo.check_for_updates",
     ))
 
-    source = LabelScheduleSource(broker)
+    source = UniqueLabelScheduleSource(
+        broker,
+        unique_task_name="bobuild.tasks_bo.check_for_updates",
+    )
 
     scheduler = TaskiqScheduler(
         broker=broker,
@@ -124,11 +152,14 @@ else:
     ).with_middlewares(
         UniqueTaskMiddleware(
             redis_url=REDIS_URL,
-            unique_task_name="bobuild.tasks.check_for_updates",
+            unique_task_name="bobuild.tasks_bo.check_for_updates",
         ),
     )
 
-    source = LabelScheduleSource(broker)
+    source = UniqueLabelScheduleSource(
+        broker,
+        unique_task_name="bobuild.tasks_bo.check_for_updates",
+    )
 
     # source = RedisScheduleSource(
     #     url=REDIS_URL,
