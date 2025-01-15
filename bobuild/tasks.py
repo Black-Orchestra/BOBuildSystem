@@ -64,7 +64,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         if self.pool is None:
             has_key = self.data.get(key, None) is not None
         else:
-            has_key = self.pool.get(key) is not None
+            has_key = await self.pool.get(key) is not None
 
         if has_key:
             logger.info("task {} is already running, not starting a new one", task.task_name)
