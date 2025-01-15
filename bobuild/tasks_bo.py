@@ -147,9 +147,9 @@ async def send_build_state_update(
 ):
     await send_webhook(
         url=url,
-        embed_title="Build started! :tools:",
+        embed_title="Build state update! :information:",
         embed_color=discord.Color.light_embed(),
-        embed_description=build_state.embed_str,
+        embed_description=f"Build state:\n{build_state.embed_str}",
         embed_footer=build_id,
     )
 
@@ -353,7 +353,7 @@ async def check_for_updates(
             url=discord_config.builds_webhook_url,
             embed_title="Build started! :tools:",
             embed_color=discord.Color.light_embed(),
-            embed_description=f"{desc}\n\n{build_state.embed_str}",
+            embed_description=f"{build_state.embed_str}\n\n{desc}",
             embed_footer=build_id,
             fields=fields,
         )
@@ -404,7 +404,7 @@ async def check_for_updates(
 
         # TODO: use UE-Library to find references to required sublevels?
 
-        build_state.state = BuildState.BREWING
+        build_state.state = BuildState.COMPILING
         await send_build_state_update(
             url=discord_config.builds_webhook_url,
             build_id=build_id,
@@ -432,7 +432,7 @@ async def check_for_updates(
         content_to_brew = ["WW2"] + roe_content
         logger.info("total number of content to brew: {}", len(total_content_to_brew))
 
-        build_state.state = BuildState.COMPILING
+        build_state.state = BuildState.BREWING
         await send_build_state_update(
             url=discord_config.builds_webhook_url,
             build_id=build_id,
