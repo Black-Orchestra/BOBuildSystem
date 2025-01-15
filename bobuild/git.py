@@ -1,11 +1,13 @@
 import asyncio
 import re
+from functools import partial
 from pathlib import Path
 from typing import Literal
 from typing import overload
 
 from bobuild.config import GitConfig
 from bobuild.log import logger
+from bobuild.run import read_stream_task
 from bobuild.utils import asyncio_run
 
 
@@ -57,22 +59,15 @@ async def run_cmd(
     if not proc.stderr:
         raise RuntimeError(f"process has no stderr: {proc}")
 
-    while True:
-        if proc.stdout.at_eof() and proc.stderr.at_eof():
-            break
+    def line_cb(_lines: list[str] | None, _name: str, _line: str):
+        logger.info("{}: {}", _name, _line)
+        if return_output:
+            _lines.append(_line)
 
-        out = (await proc.stdout.readline()
-               ).decode("utf-8", errors="replace").rstrip()
-        if out:
-            logger.info("git stdout: {}", out)
-            if return_output:
-                all_out.append(out)
-        err = (await proc.stderr.readline()
-               ).decode("utf-8", errors="replace").rstrip()
-        if err:
-            logger.info("git stderr: {}", err)
-            if return_output:
-                all_err.append(err)
+    await asyncio.gather(*(
+        read_stream_task(proc.stdout, partial(line_cb, all_out, "git stdout")),
+        read_stream_task(proc.stderr, partial(line_cb, all_err, "git stderr")),
+    ))
 
     ec = await proc.wait()
     logger.info("git command exited with code: {}", ec)
@@ -123,6 +118,29 @@ async def fetch_repo(repo_path: Path) -> None:
     )
 
 
+async def sync_repo(
+        repo_path: Path,
+        branch: str,
+):
+    """WARNING: does a hard reset and clean!"""
+    await fetch_repo(repo_path)
+    await run_cmd(
+        "reset",
+        "--hard",
+        f"origin/{branch}",
+        cwd=repo_path,
+        raise_on_error=True
+    )
+    await run_cmd(
+        "clean",
+        "-x",
+        "-d",
+        "-f",
+        cwd=repo_path,
+        raise_on_error=True,
+    )
+
+
 async def repo_has_update(repo_path: Path, branch: str) -> bool:
     _, out, err = await run_cmd(
         "fetch", "--dry-run", "--verbose",
@@ -163,6 +181,7 @@ async def main() -> None:
     print(f"{has_update=}")
 
     if exists and has_update:
+        await fetch_repo(config.repo_path)
         await pull_repo(config.repo_path)
 
 

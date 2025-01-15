@@ -114,6 +114,18 @@ class LogEventHandler(AIOEventHandler):
 T = TypeVar("T")
 
 
+async def read_stream_task(
+        stream: asyncio.StreamReader,
+        callback: Callable[[str], None],
+) -> None:
+    while True:
+        if stream.at_eof():
+            break
+        line = (await stream.readline()).decode("utf-8", errors="replace").rstrip()
+        if line:
+            callback(line)
+
+
 async def wait_for(
         coro: Coroutine[Any, Any, T],
         default: T,

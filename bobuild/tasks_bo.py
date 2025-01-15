@@ -293,7 +293,7 @@ async def check_for_updates(
         if git_has_update:
             hash_diffs_tasks.append(bobuild.git.hash_diff(
                 git_config.repo_path, git_config.repo_url))
-            sync_tasks.append(bobuild.hg.sync(git_config.repo_path))
+            sync_tasks.append(bobuild.git.sync_repo(git_config.repo_path, git_config.branch))
         elif any_sync_task:
             hash_diffs_tasks.append(dummy_hash_task())
 
