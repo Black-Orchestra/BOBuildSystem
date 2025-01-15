@@ -62,6 +62,8 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
+        global _dummy_data
+
         if task.task_name != self.unique_task_name:
             return
 
@@ -71,7 +73,6 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
 
         if self.pool is None:
-            global _dummy_data
             has_key = _dummy_data.get(key, None) is not None
         else:
             has_key = await self.pool.get(key) is not None
@@ -82,7 +83,6 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
             return
 
         if self.pool is None:
-            global _dummy_data
             _dummy_data[key] = task.task_name
         else:
             await self.pool.set(key, 1, ex=self.expiration)
