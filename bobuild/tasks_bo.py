@@ -283,7 +283,7 @@ async def check_for_updates(
 
         # TODO: this is to be able to send cancel webhook.
         # TODO: this is getting kinda spaghetti-ey.
-        if context.broker.state.ids_ is None:
+        if getattr(context.broker.state, "ids_", None) is None:
             context.broker.state.ids_ = {}
         context.broker.state.ids_[context.message.task_name] = context.message.task_id
 
@@ -505,9 +505,9 @@ Mercurial maps commit: {hg_maps_hash}.
 
         raise
     finally:
-        if context.broker.state.ids_ is not None:
+        if ids := getattr(broker.state, "ids_", {}):
             try:
-                del context.broker.state.ids_[context.message.task_name]
+                del ids[context.message.task_name]
             except KeyError:
                 pass
 

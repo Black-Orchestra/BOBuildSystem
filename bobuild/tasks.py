@@ -229,8 +229,8 @@ else:
         #             )
         #
 
-        if state.ids_ is not None:
-            ids: dict[str, str] = state.ids_
+        if ids := getattr(broker.state, "ids_", {}):
+            ids: dict[str, str]
             for task_id in ids:
                 discord_cfg = DiscordConfig()
                 await send_webhook(
