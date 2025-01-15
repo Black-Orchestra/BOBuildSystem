@@ -160,7 +160,16 @@ async def repo_has_update(repo_path: Path, branch: str) -> bool:
 
 
 async def get_local_hash(repo_path: Path) -> str:
-    return (await run_cmd("rev-parse", "--verify", "HEAD", cwd=repo_path))[1].strip()
+    return (
+        await run_cmd(
+            "rev-parse",
+            "--verify",
+            "HEAD",
+            cwd=repo_path,
+            return_output=True,
+            raise_on_error=True,
+        )
+    )[1].strip()
 
 
 async def hash_diff(repo_path: Path, repo_url: str) -> tuple[str, str]:
