@@ -42,14 +42,14 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
             expiration: int = 60 * 60,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
-        # TODO: when redis_url is not set, use in-memory dict!
-
         super().__init__(_broker)
 
         self.expiration = expiration
         self.unique_task_name = unique_task_name
         if redis_url is not None:
             self.pool: Redis | None = Redis.from_url(redis_url)
+        else:
+            self.data: dict[str, str] = {}
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
@@ -61,10 +61,18 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
         key = f"taskiq_unique:{self.unique_task_name}"
 
-        if await self.pool.get(key):
+        if self.pool is None:
+            has_key = self.data.get(key, None) is not None
+        else:
+            has_key = self.pool.get(key) is not None
+
+        if has_key:
             logger.info("task {} is already running, not starting a new one", task.task_name)
             task.task_name = "bobuild.tasks_bo.bo_dummy_task"
             return
+
+        if self.pool is None:
+            pass
         else:
             await self.pool.set(key, 1, ex=self.expiration)
 
@@ -84,14 +92,15 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
             expiration: int = 60 * 60,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
-        # TODO: when redis_url is not set, use in-memory dict!
-
         super().__init__()
 
         self.expiration = expiration
         self.unique_task_name = unique_task_name
+
         if redis_url is not None:
             self.pool: Redis | None = Redis.from_url(redis_url)
+        else:
+            self.data: dict[str, str] = {}
 
     @override
     async def post_save(
@@ -101,7 +110,10 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
     ) -> None:
         if message.task_name == self.unique_task_name:
             logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
-            await self.pool.delete(f"taskiq_unique:{message.task_name}")
+            if self.pool is None:
+                del self.data[message.task_name]
+            else:
+                await self.pool.delete(f"taskiq_unique:{message.task_name}")
 
     @override
     async def shutdown(self):

@@ -51,15 +51,15 @@ async def run_cmd(
         cwd=cwd,
     )
 
-    all_out = []
-    all_err = []
+    all_out: list[str] = []
+    all_err: list[str] = []
 
     if not proc.stdout:
         raise RuntimeError(f"process has no stdout: {proc}")
     if not proc.stderr:
         raise RuntimeError(f"process has no stderr: {proc}")
 
-    def line_cb(_lines: list[str] | None, _name: str, _line: str):
+    def line_cb(_lines: list[str], _name: str, _line: str):
         logger.info("{}: {}", _name, _line)
         if return_output:
             _lines.append(_line)

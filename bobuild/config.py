@@ -203,3 +203,10 @@ class RS2Config:
     @cachedproperty
     def vneditor_exe(self):
         return self.game_install_dir / "Binaries/Win64/VNEditor.exe"
+
+
+@dataclass(frozen=True)
+class DiscordConfig:
+    @cachedproperty
+    def builds_webhook_url(self) -> str:
+        return get_var("BO_DISCORD_BUILDS_WEBHOOK")

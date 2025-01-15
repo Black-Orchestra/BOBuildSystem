@@ -1,11 +1,13 @@
 import asyncio
 import datetime
 import shutil
+import traceback
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated
 
+import discord
 from redis.asyncio import Redis
 from taskiq import Context
 from taskiq import TaskiqDepends
@@ -14,68 +16,22 @@ import bobuild.git
 import bobuild.hg
 import bobuild.run
 import bobuild.workshop
+from bobuild.bo_discord import send_webhook
+from bobuild.config import DiscordConfig
 from bobuild.config import GitConfig
 from bobuild.config import MercurialConfig
 from bobuild.config import RS2Config
 from bobuild.log import logger
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
-from bobuild.utils import is_dev_env
 from bobuild.workshop import find_map_names
 from bobuild.workshop import iter_maps
 
 _repo_dir = Path(__file__).parent.resolve()
 
-if is_dev_env():
-    _update_timestamp = None
 
-
-    async def set_update_in_progress(updating: bool) -> float | None:
-        global _update_timestamp
-
-        old_ts = _update_timestamp
-
-        if updating:
-            _update_timestamp = datetime.datetime.now(tz=datetime.timezone.utc).timestamp()
-        else:
-            _update_timestamp = None
-
-        return old_ts
-
-
-    async def update_is_running() -> bool:
-        return _update_timestamp is not None
-else:
-    async def set_update_in_progress(updating: bool) -> float | None:
-        ret = None
-
-        if updating:
-            get_task = await get_val.kiq("bo_check_for_updates_running")
-            get_result = await get_task.wait_result()
-            get_result.raise_for_error()
-            old_timeout = get_result.return_value
-            if old_timeout is not None:
-                ret = float(old_timeout)
-
-            val = str(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())
-            set_task = await set_val.kiq("bo_check_for_updates_running", val, persist=True)
-            set_result = await set_task.wait_result()
-            set_result.raise_for_error()
-        else:
-            delete_task = await delete_val.kiq("bo_check_for_updates_running")
-            delete_result = await delete_task.wait_result()
-            delete_result.raise_for_error()
-
-        return ret
-
-
-    async def update_is_running() -> bool:
-        get_task = await get_val.kiq("bo_check_for_updates_running")
-        get_result = await get_task.wait_result()
-        get_result.raise_for_error()
-        val = get_result.return_value
-        # TODO: probably need to check the timestamp here (or somewhere)?
-        return val is not None
+def utcnow() -> datetime.datetime:
+    return datetime.datetime.now(tz=datetime.timezone.utc)
 
 
 def redis_dep(context: Annotated[Context, TaskiqDepends()]) -> Redis:
@@ -94,35 +50,8 @@ def rs2_config_dep(_: Annotated[Context, TaskiqDepends()]) -> RS2Config:
     return RS2Config()
 
 
-# TODO: why use these via tasks? Just use redis directly?!
-@broker.task(timeout=30)
-async def get_val(
-        key: str,
-        redis: Redis = TaskiqDepends(redis_dep),
-) -> str | None:
-    return await redis.get(key)
-
-
-# TODO: why use these via tasks? Just use redis directly?!
-@broker.task(timeout=30)
-async def delete_val(
-        key: str,
-        redis: Redis = TaskiqDepends(redis_dep),
-) -> None:
-    await redis.delete(key)
-
-
-# TODO: why use these via tasks? Just use redis directly?!
-@broker.task(timeout=30)
-async def set_val(
-        key: str,
-        value: str,
-        redis: Redis = TaskiqDepends(redis_dep),
-        persist: bool = False,
-) -> None:
-    await redis.set(key, value)
-    if persist:
-        await redis.persist(key)
+def discord_config_dep(_: Annotated[Context, TaskiqDepends()]) -> DiscordConfig:
+    return DiscordConfig()
 
 
 async def dummy_hash_task() -> tuple[str, str]:
@@ -199,26 +128,40 @@ async def check_for_updates(
         hg_config: MercurialConfig = TaskiqDepends(hg_config_dep),
         git_config: GitConfig = TaskiqDepends(git_config_dep),
         rs2_config: RS2Config = TaskiqDepends(rs2_config_dep),
+        discord_config: DiscordConfig = TaskiqDepends(discord_config_dep),
 ) -> None:
+    """NOTE: custom middleware and scheduler should ensure this task
+    is "unique". Running multiple instances of this task in parallel
+    is not supported and can break external dependencies such as
+    git and hg repos!
+
+    TODO: split this into more functions.
+    TODO: perhaps even use a pipeline?
+    """
     started_updating = False
 
-    logger.info("checking for updates")
+    git_hash = ""
+    hg_pkgs_hash = ""
+    hg_maps_hash = ""
 
     try:
-        # TODO: get running task status from Postgres?
-        if await update_is_running():
-            logger.info("skip checking updates, update in-progress flag is already set")
-            return
+        logger.info("checking for updates")
 
-        # Get task ID here, store it in DB and set in-progress state.
-        started_updating = True
+        # TODO: get running task status from Postgres?
+
+        # TODO: custom scheduler should handle this!
+        # if await update_is_running():
+        #     logger.info("skip checking updates, update in-progress flag is already set")
+        #     return
+
+        # TODO: Get task ID here, store it in DB and set in-progress state?
 
         # TODO: do something with this?
-        old_update_timestamp = await set_update_in_progress(True)
-        if old_update_timestamp:
-            logger.warning(
-                "old update in-progress flag was set, "
-                "cleanup was potentially skipped: {}", old_update_timestamp)
+        # old_update_timestamp = await set_update_in_progress(True)
+        # if old_update_timestamp:
+        #     logger.warning(
+        #         "old update in-progress flag was set, "
+        #         "cleanup was potentially skipped: {}", old_update_timestamp)
 
         bobuild.hg.ensure_config(hg_config)
         await bobuild.run.ensure_vneditor_modpackages_config(
@@ -227,6 +170,9 @@ async def check_for_updates(
         )
 
         clone_tasks = []
+
+        # TODO: should cloning be a part of this task? Should we just assume
+        #  the build server is already set up properly with the repos in place?
 
         cloned_git = False
         if not await bobuild.git.repo_exists(git_config.repo_path):
@@ -256,6 +202,9 @@ async def check_for_updates(
         hg_pkgs_incoming_task = bobuild.hg.incoming(hg_config.pkg_repo_path)
         hg_maps_incoming_task = bobuild.hg.incoming(hg_config.maps_repo_path)
         git_has_update_task = bobuild.git.repo_has_update(git_config.repo_path, git_config.branch)
+
+        # TODO: check here whether hg repos have missing items?
+        # TODO: bobuild.hg.has_missing implementation!
 
         logger.info("running all repo update check tasks")
         hg_pkgs_inc, hg_maps_inc, git_has_update = await asyncio.gather(
@@ -297,6 +246,10 @@ async def check_for_updates(
         elif any_sync_task:
             hash_diffs_tasks.append(dummy_hash_task())
 
+        hg_pkg_hashes = ("", "")
+        hg_maps_hashes = ("", "")
+        git_hashes = ("", "")
+
         if hash_diffs_tasks:
             logger.info("running {} hash diff tasks", len(hash_diffs_tasks))
             hg_pkg_hashes, hg_maps_hashes, git_hashes = await asyncio.gather(*hash_diffs_tasks)
@@ -317,6 +270,29 @@ async def check_for_updates(
             else:
                 logger.info("no further work to be done")
                 return
+
+        started_updating = True
+
+        fields = []
+        desc = "Detected changes in the following repos:"
+
+        # TODO: improve handling of these hash tuples!
+        if git_hashes[0] and git_hashes[1]:
+            fields.append(("Git update", f"{git_hashes[0]} -> {git_hashes[1]}", False))
+        if hg_pkg_hashes[0] and hg_pkg_hashes[1]:
+            fields.append(("HG packages update", f"{hg_pkg_hashes[0]} -> {hg_pkg_hashes[1]}", False))
+        if hg_maps_hashes[0] and hg_maps_hashes[1]:
+            fields.append(("HG maps update", f"{hg_maps_hashes[0]} -> {hg_maps_hashes[1]}", False))
+
+        await send_webhook(
+            url=discord_config.builds_webhook_url,
+            embed_title="Build started! :tools:",
+            embed_color=discord.Color.light_embed(),
+            embed_timestamp=utcnow(),
+            embed_description=desc,
+            embed_footer=context.message.task_id,
+            fields=fields,
+        )
 
         git_hash = await bobuild.git.get_local_hash(git_config.repo_path)
         hg_pkgs_hash = await bobuild.hg.get_local_hash(hg_config.pkg_repo_path)
@@ -463,7 +439,51 @@ Mercurial maps commit: {hg_maps_hash}.
     except Exception as e:
         logger.error("error running task: {}: {}: {}",
                      context.message, type(e).__name__, e)
+
+        # Don't report failures for tasks that had no actual work to do!
+        if started_updating:
+            fields = [
+                ("Git commit", git_hash, False),
+                ("HG packages commit", hg_pkgs_hash, False),
+                ("HG maps commit", hg_maps_hash, False),
+            ]
+
+            desc = (
+                "```python-repl\n"
+                f"Error: {type(e).__name__}\n"
+                f"{traceback.format_exc()}\n"
+                "```"
+            )
+
+            await send_webhook(
+                url=discord_config.builds_webhook_url,
+                embed_title="Build failure! :skull:",
+                embed_color=discord.Color.red(),
+                embed_timestamp=utcnow(),
+                embed_description=desc,
+                embed_footer=context.message.task_id,
+                fields=fields,
+            )
+
         raise
     finally:
         if started_updating:
-            await set_update_in_progress(False)
+            # TODO: middleware should handle this:
+            #     await set_update_in_progress(False)
+
+            # TODO: move duplicated stuff into dedicated webhook funcs?
+            fields = [
+                ("Git commit", git_hash, False),
+                ("HG packages commit", hg_pkgs_hash, False),
+                ("HG maps commit", hg_maps_hash, False),
+            ]
+
+            await send_webhook(
+                url=discord_config.builds_webhook_url,
+                embed_title="Build success! :thumbsup:",
+                embed_color=discord.Color.green(),
+                embed_timestamp=utcnow(),
+                # embed_description=desc,
+                embed_footer=context.message.task_id,
+                fields=fields,
+            )

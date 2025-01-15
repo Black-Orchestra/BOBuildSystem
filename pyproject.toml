@@ -26,6 +26,8 @@ classifiers = [
 
 dependencies = [
     "Pillow==11.1.0",
+    "aiohttp[speedups]==3.11.11",
+    "audioop-lts==0.2.1", # NEEDED BY DISCORD FOR PY 3.13!
     "boltons==24.1.0",
     "discord.py==2.4.0",
     "hachiko @ {root:uri}/submodules/hachiko",
@@ -36,6 +38,7 @@ dependencies = [
     "taskiq-redis==1.0.2",
     "taskiq[orjson]==0.11.10",
     "tqdm==4.67.1",
+    "ujson==5.10.0",
     "uvloop==0.21.0; platform_system != 'Windows'",
     "vdf==3.4",
     "winloop==0.1.7; platform_system == 'Windows'",
