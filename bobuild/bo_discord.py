@@ -1,13 +1,18 @@
 import argparse
 import asyncio
 import datetime
+import ssl
 
 import aiohttp
+import certifi
 import discord
 import ujson
 
 from bobuild.config import DiscordConfig
 from bobuild.log import logger
+
+_certs = certifi.where()
+_ssl_ctx = ssl.create_default_context(cafile=_certs)
 
 
 async def test_builds_webhook(cfg: DiscordConfig):
@@ -53,16 +58,18 @@ async def send_webhook(
         for field in fields:
             embed.add_field(name=field[0], value=field[1], inline=field[2])
 
-    async with aiohttp.ClientSession(
-            json_serialize=ujson.dumps,
-    ) as session:
-        webhook: discord.Webhook = discord.Webhook.from_url(url, session=session)
-        length = len(embed) + len(content)
-        logger.info("sending webhook, length={}", length)
-        await webhook.send(
-            content=content,
-            embed=embed,
-        )
+    async with aiohttp.TCPConnector(ssl=_ssl_ctx) as conn:
+        async with aiohttp.ClientSession(
+                json_serialize=ujson.dumps,
+                connector=conn,
+        ) as session:
+            webhook: discord.Webhook = discord.Webhook.from_url(url, session=session)
+            length = len(embed) + len(content)
+            logger.info("sending webhook, length={}", length)
+            await webhook.send(
+                content=content,
+                embed=embed,
+            )
 
 
 async def main():
