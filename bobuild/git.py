@@ -175,7 +175,15 @@ async def get_local_hash(repo_path: Path) -> str:
 async def hash_diff(repo_path: Path, repo_url: str) -> tuple[str, str]:
     """Return commit tuple (current local hash, latest remote hash)."""
     local_hash = await get_local_hash(repo_path)
-    remote_refs = (await run_cmd("ls-remote", repo_url, "HEAD"))[1]
+    remote_refs = (
+        await run_cmd(
+            "ls-remote",
+            repo_url,
+            "HEAD",
+            raise_on_error=True,
+            return_output=True,
+        )
+    )[1]
     remote_hash = remote_refs.split()[0]
     return local_hash, remote_hash.strip()
 
