@@ -33,6 +33,10 @@ if platform.system() == "Windows":
 
 logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
+UNIQUE_PREFIX = "taskiq_unique"
+
+_dummy_data: dict[str, str]
+
 
 class UniqueLabelScheduleSource(LabelScheduleSource):
     def __init__(
@@ -49,7 +53,9 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         if redis_url is not None:
             self.pool: Redis | None = Redis.from_url(redis_url)
         else:
-            self.data: dict[str, str] = {}
+            global _dummy_data
+            if not _dummy_data:
+                _dummy_data = {}
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
@@ -59,10 +65,11 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         if self.pool is None:
             return
 
-        key = f"taskiq_unique:{self.unique_task_name}"
+        key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
 
         if self.pool is None:
-            has_key = self.data.get(key, None) is not None
+            global _dummy_data
+            has_key = _dummy_data.get(key, None) is not None
         else:
             has_key = await self.pool.get(key) is not None
 
@@ -72,11 +79,10 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
             return
 
         if self.pool is None:
-            pass
+            global _dummy_data
+            _dummy_data[key] = task.task_name
         else:
             await self.pool.set(key, 1, ex=self.expiration)
-
-        return
 
     @override
     async def shutdown(self):
@@ -100,7 +106,9 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
         if redis_url is not None:
             self.pool: Redis | None = Redis.from_url(redis_url)
         else:
-            self.data: dict[str, str] = {}
+            global _dummy_data
+            if not _dummy_data:
+                _dummy_data = {}
 
     @override
     async def post_save(
@@ -111,9 +119,10 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
         if message.task_name == self.unique_task_name:
             logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
             if self.pool is None:
-                del self.data[message.task_name]
+                global _dummy_data
+                del _dummy_data[message.task_name]
             else:
-                await self.pool.delete(f"taskiq_unique:{message.task_name}")
+                await self.pool.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
 
     @override
     async def shutdown(self):
@@ -192,4 +201,28 @@ else:
 
     @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
     async def shutdown(state: TaskiqState) -> None:
-        await state.redis.disconnect()
+        pool: ConnectionPool = state.redis
+        # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
+        # redis: Redis = Redis.from_pool(pool)
+        #
+        # # TODO: this is getting kinda spaghetti-ey.
+        # async for key in redis.scan_iter(match=f"{UNIQUE_PREFIX}:*"):
+        #     logger.warning("leftover taskiq_unique key: {}", key)
+        #     await redis.delete(key)
+        #
+        # for mw in broker.middlewares:
+        #     if isinstance(mw, UniqueTaskMiddleware):
+        #         tn = mw.unique_task_name
+        #         for
+        #
+        #         if task:
+        #             discord_cfg = DiscordConfig()
+        #             await send_webhook(
+        #                 url=discord_cfg.builds_webhook_url,
+        #                 embed_title="Build cancelled! :warning:",
+        #                 embed_color=discord.Color.yellow(),
+        #                 embed_footer=task.task_id,
+        #             )
+        #
+        # await redis.close()
+        await pool.disconnect()
