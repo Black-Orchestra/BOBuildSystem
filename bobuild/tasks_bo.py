@@ -390,6 +390,9 @@ async def check_for_updates(
         # TODO: should we also do this for unpublished content?
         #   Only remove content from unpublished that does not exist in repos?
         #   Then copy over content that has newer timestamp?
+        # TODO: would that be reliable enough? Or should we calculate hashes
+        #   for the files? Such a task should probably be offloaded to a
+        #   separate high-performance program?
 
         unpub_pkgs_dir.mkdir(parents=True, exist_ok=True)
         unpub_maps_dir.mkdir(parents=True, exist_ok=True)
@@ -418,6 +421,10 @@ async def check_for_updates(
             copy_tree(m.parent, map_unpub_dir, "*.roe")
 
         # TODO: use UE-Library to find references to required sublevels?
+
+        ww2u = rs2_config.published_dir / "CookedPC/WW2.u"
+        logger.info("removing '{}'", ww2u)
+        ww2u.unlink(missing_ok=True)
 
         build_state.state = BuildState.COMPILING
         await send_build_state_update(
