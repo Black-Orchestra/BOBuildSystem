@@ -245,6 +245,7 @@ async def run_vneditor(
         vneditor_path: Path,
         command: str,
         *args: str,
+        raise_on_error: bool = False,
         extra_log_exit_strings: list[str] | None = None,
         extra_error_strings: list[str] | None = None,
 ) -> None:
@@ -274,7 +275,7 @@ async def run_vneditor(
         "-forcelogflush",
         "-auto",
         "-nopause",
-        raise_on_error=False,
+        raise_on_error=raise_on_error,
         stop_event=stop_event,
     )
 
@@ -305,6 +306,7 @@ async def vneditor_make(
         "-stripsource",
         extra_log_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
+        raise_on_error=True,
     )
 
 
@@ -320,6 +322,7 @@ async def vneditor_brew(
         *content,
         extra_log_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
+        raise_on_error=True,
     )
 
 
