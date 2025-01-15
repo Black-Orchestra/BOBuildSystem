@@ -329,7 +329,7 @@ async def patch_shader_cache(
         object_to_patch_path: str,
 ):
     repo_dir = Path(__file__).parent.parent
-    patcher = Path(repo_dir).resolve() / "UE3ShaderCachePatcherCLI.exe"
+    patcher = Path(repo_dir).resolve() / "bin/UE3ShaderCachePatcherCLI.exe"
     if not patcher.exists():
         raise RuntimeError(f"UE3ShaderCachePatcherCLI.exe does not exist in '{patcher}'")
 
