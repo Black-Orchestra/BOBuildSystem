@@ -114,8 +114,10 @@ class LogEventHandler(AIOEventHandler):
                             break
 
             if log_end:
-                logger.info("setting stop event")
-                self._stop_event.set()
+                logger.info("detected log end")
+                # TODO: This is unreliable, and should also be unnecessary
+                #   with -nopause command line arg!
+                # self._stop_event.set()
 
     def __del__(self):
         if self._fh:
