@@ -101,13 +101,27 @@ async def sync(repo_path: Path) -> None:
 
 
 async def get_local_hash(repo_path: Path) -> str:
-    return (await run_cmd("id", "-i", cwd=repo_path))[1].strip()
+    return (await run_cmd(
+        "id",
+        "-i",
+        cwd=repo_path,
+        return_output=True,
+        raise_on_error=True,
+    ))[1].strip()
 
 
 async def hash_diff(repo_path: Path, repo_url: str) -> tuple[str, str]:
     """Return commit tuple (current local hash, incoming hash)."""
     local_hash = await get_local_hash(repo_path)
-    remote_hash = (await run_cmd("id", "-r", "tip", repo_url))[1]
+    remote_hash = (
+        await run_cmd(
+            "id",
+            "-r",
+            "tip",
+            repo_url,
+            raise_on_error=True,
+            return_output=True,
+        ))[1]
     return local_hash, remote_hash.strip()
 
 
