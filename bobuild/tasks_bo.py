@@ -218,6 +218,9 @@ async def check_for_updates(
             rs2_config=rs2_config,
             mod_packages=["WW2"],
         )
+        await bobuild.run.ensure_roengine_config(
+            rs2_config=rs2_config,
+        )
 
         clone_tasks = []
 

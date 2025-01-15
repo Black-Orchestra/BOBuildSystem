@@ -427,12 +427,43 @@ async def ensure_vneditor_modpackages_config(
         cfg.write(f, space_around_delimiters=False)
 
 
+async def ensure_roengine_config(rs2_config: RS2Config, *_, **__):
+    """Assumes config files exist already."""
+    docs_dir = rs2_config.rs2_documents_dir
+
+    config_file = docs_dir / "ROGame/Config/ROEngine.ini"
+    cfg = MultiConfigParser()
+    cfg.read(config_file)
+
+    suppressions = cfg["Core.System"].getlist("Suppress") or []
+    if "DevCompile" in suppressions:
+        suppressions.remove("DevCompile")
+    if "DevConfig" in suppressions:
+        suppressions.remove("DevConfig")
+    if "DevCooking" in suppressions:
+        suppressions.remove("DevCooking")
+    if "DevLoad" in suppressions:
+        suppressions.remove("DevLoad")
+    if "DevShaders" in suppressions:
+        suppressions.remove("DevShaders")
+    if "DevShadersDetailed" in suppressions:
+        suppressions.remove("DevShadersDetailed")
+
+    cfg["Core.System"]["Suppress"] = "\n".join(suppressions)
+    cfg["LogFiles"]["PurgeLogsDays"] = "365"
+
+    with config_file.open("w") as f:
+        logger.info("writing config file: '{}'", config_file)
+        cfg.write(f, space_around_delimiters=False)
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser()
     rs2_cfg = RS2Config()
 
     action_choices = {
         "configure_sdk": ensure_vneditor_modpackages_config,
+        "configure_roengine": ensure_roengine_config,
     }
     ap.add_argument(
         "action",
