@@ -86,7 +86,7 @@ async def run_cmd(
 
 async def repo_exists(path: Path) -> bool:
     p = str(path.resolve())
-    ec = await run_cmd("--cwd", p, "root")
+    ec = (await run_cmd("--cwd", p, "root"))[0]
     return ec == 0
 
 
