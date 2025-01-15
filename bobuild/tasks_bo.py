@@ -119,7 +119,7 @@ def hg_maps_url(hash_: str) -> str:
 
 class BuildState(StrEnum):
     SYNCING = "Syncing repos."
-    COMPILING = "Compiling script."
+    COMPILING = "Compiling scripts."
     BREWING = "Brewing content."
     # PREPARING_UPLOAD = "Preparing Steam Workshop uploads."
     # UPLOADING = "Uploading to Steam Workshop."
