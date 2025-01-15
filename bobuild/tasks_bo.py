@@ -107,6 +107,18 @@ async def bo_dummy_task():
     logger.info("running dummy task to do nothing")
 
 
+def git_url(hash_: str) -> str:
+    return f"[{hash_}](https://github.com/adriaNsteam/WW2/commit/{hash_})"
+
+
+def hg_pkgs_url(hash_: str) -> str:
+    return f"[{hash_}](https://repo.blackorchestra.net/hg/BO/rev/{hash_})"
+
+
+def hg_maps_url(hash_: str) -> str:
+    return f"[{hash_}](https://repo.blackorchestra.net/hg/BO_maps/rev/{hash_})"
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 # TODO: we can leave behind long-running garbage processes
@@ -139,6 +151,7 @@ async def check_for_updates(
     TODO: perhaps even use a pipeline?
     """
     started_updating = False
+    build_id = f"Build ID {context.message.task_id}"
 
     git_hash = ""
     hg_pkgs_hash = ""
@@ -278,11 +291,20 @@ async def check_for_updates(
 
         # TODO: improve handling of these hash tuples!
         if git_hashes[0] and git_hashes[1]:
-            fields.append(("Git update", f"{git_hashes[0]} -> {git_hashes[1]}", False))
+            fields.append(
+                ("Git update",
+                 f"{git_url(git_hashes[0])} -> {git_url(git_hashes[1])}", False)
+            )
         if hg_pkg_hashes[0] and hg_pkg_hashes[1]:
-            fields.append(("HG packages update", f"{hg_pkg_hashes[0]} -> {hg_pkg_hashes[1]}", False))
+            fields.append(
+                ("HG packages update",
+                 f"{hg_pkgs_url(hg_pkg_hashes[0])} -> {hg_pkgs_url(hg_pkg_hashes[1])}", False)
+            )
         if hg_maps_hashes[0] and hg_maps_hashes[1]:
-            fields.append(("HG maps update", f"{hg_maps_hashes[0]} -> {hg_maps_hashes[1]}", False))
+            fields.append(
+                ("HG maps update",
+                 f"{hg_maps_url(hg_maps_hashes[0])} -> {hg_maps_url(hg_maps_hashes[1])}", False)
+            )
 
         await send_webhook(
             url=discord_config.builds_webhook_url,
@@ -290,7 +312,7 @@ async def check_for_updates(
             embed_color=discord.Color.light_embed(),
             embed_timestamp=utcnow(),
             embed_description=desc,
-            embed_footer=context.message.task_id,
+            embed_footer=build_id,
             fields=fields,
         )
 
@@ -438,9 +460,9 @@ Mercurial maps commit: {hg_maps_hash}.
 
         # TODO: move duplicated stuff into dedicated webhook funcs?
         fields = [
-            ("Git commit", git_hash, False),
-            ("HG packages commit", hg_pkgs_hash, False),
-            ("HG maps commit", hg_maps_hash, False),
+            ("Git commit", git_url(git_hash), False),
+            ("HG packages commit", hg_pkgs_url(hg_pkgs_hash), False),
+            ("HG maps commit", hg_maps_url(hg_maps_hash), False),
         ]
 
         await send_webhook(
@@ -449,7 +471,7 @@ Mercurial maps commit: {hg_maps_hash}.
             embed_color=discord.Color.green(),
             embed_timestamp=utcnow(),
             # embed_description=desc,
-            embed_footer=context.message.task_id,
+            embed_footer=build_id,
             fields=fields,
         )
 
@@ -461,9 +483,9 @@ Mercurial maps commit: {hg_maps_hash}.
         # Don't report failures for tasks that had no actual work to do!
         if started_updating:
             fields = [
-                ("Git commit", git_hash, False),
-                ("HG packages commit", hg_pkgs_hash, False),
-                ("HG maps commit", hg_maps_hash, False),
+                ("Git commit", git_url(git_hash), False),
+                ("HG packages commit", hg_pkgs_url(hg_pkgs_hash), False),
+                ("HG maps commit", hg_maps_url(hg_maps_hash), False),
             ]
 
             desc = (
@@ -479,7 +501,7 @@ Mercurial maps commit: {hg_maps_hash}.
                 embed_color=discord.Color.red(),
                 embed_timestamp=utcnow(),
                 embed_description=desc,
-                embed_footer=context.message.task_id,
+                embed_footer=build_id,
                 fields=fields,
             )
 
