@@ -126,7 +126,7 @@ class BuildState(StrEnum):
 
 @dataclass(slots=True)
 class TaskBuildState:
-    state: BuildState = BuildState(0)
+    state: BuildState = BuildState.SYNCING
 
     @property
     def embed_str(self) -> str:
@@ -321,7 +321,7 @@ async def check_for_updates(
                 return
 
         started_updating = True
-        build_state = TaskBuildState(BuildState(0))
+        build_state = TaskBuildState(BuildState.SYNCING)
 
         # TODO: this is to be able to send cancel webhook.
         # TODO: this is getting kinda spaghetti-ey.
