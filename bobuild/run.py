@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import re
+from functools import partial
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -31,6 +32,7 @@ class LogEventHandler(AIOEventHandler):
             log_file: Path,
             loop: asyncio.AbstractEventLoop | None = None,
             extra_log_exit_strings: list[str] | None = None,
+            extra_error_strings: list[str] | None = None,
     ):
         super().__init__(loop=loop)
 
@@ -42,6 +44,7 @@ class LogEventHandler(AIOEventHandler):
         self._warnings: list[str] = []
         self._errors: list[str] = []
         self._extra_log_exit_strings = extra_log_exit_strings or []
+        self._extra_error_strings = extra_error_strings or []
 
     @property
     def warnings(self) -> list[str]:
@@ -81,11 +84,13 @@ class LogEventHandler(AIOEventHandler):
                     if match.group(1).lower() == "error":
                         if match.group(2):
                             self._errors.append(line)
-                    elif "##ERROR##" in match.group(2):
-                        self._errors.append(line)
                     elif match.group(1).lower() == "warning":
                         if match.group(2):
                             self._warnings.append(line)
+                    else:
+                        for err_str in self._extra_error_strings:
+                            if err_str in line:
+                                self._errors.append(line)
 
                 # if os.getenv("GITHUB_ACTIONS"):
                 #     line = unicodedata.normalize("NFKD", line)
@@ -119,6 +124,19 @@ async def read_stream_task(
         callback: Callable[[str], None],
 ) -> None:
     while True:
+        if stream.at_eof():
+            break
+        line = (await stream.readline()).decode("utf-8", errors="replace").rstrip()
+        if line:
+            callback(line)
+
+
+async def read_stream_task_se(
+        stream: asyncio.StreamReader,
+        callback: Callable[[str], None],
+        stop_event: asyncio.Event,
+) -> None:
+    while not stop_event.is_set():
         if stream.at_eof():
             break
         line = (await stream.readline()).decode("utf-8", errors="replace").rstrip()
@@ -198,26 +216,15 @@ async def run_process(
     if not proc.stderr:
         raise RuntimeError(f"process has no stderr: {proc}")
 
-    timeout = 0.1
-    while True:
-        if proc.stdout.at_eof() and proc.stderr.at_eof():
-            break
+    def line_cb(_lines: list[str], _name: str, _line: str):
+        logger.info("{}: {}", _name, _line)
+        if return_output:
+            _lines.append(_line)
 
-        out = (await wait_for(proc.stdout.readline(), b"", timeout=timeout)
-               ).decode("utf-8", errors="replace").rstrip()
-        if out:
-            logger.info("{} stdout: {}", pn, out)
-            if return_output:
-                all_out.append(out)
-        err = (await wait_for(proc.stderr.readline(), b"", timeout=timeout)
-               ).decode("utf-8", errors="replace").rstrip()
-        if err:
-            logger.info("{} stderr: {}", pn, err)
-            if return_output:
-                all_err.append(err)
-
-        if stop_event and stop_event.is_set():
-            break
+    await asyncio.gather(*(
+        read_stream_task_se(proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event),
+        read_stream_task_se(proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event),
+    ))
 
     ec = await proc.wait()
     logger.info("program {} exited with code: {}", pn, ec)
@@ -237,6 +244,7 @@ async def run_vneditor(
         command: str,
         *args: str,
         extra_log_exit_strings: list[str] | None = None,
+        extra_error_strings: list[str] | None = None,
 ) -> None:
     stop_event = asyncio.Event()
     logs_dir = rs2_documents_dir / "ROGame/Logs"
@@ -245,6 +253,7 @@ async def run_vneditor(
         stop_event=stop_event,
         log_file=log,
         extra_log_exit_strings=extra_log_exit_strings,
+        extra_error_strings=extra_error_strings,
     )
     watch = AIOWatchdog(
         path=logs_dir,
@@ -292,6 +301,8 @@ async def vneditor_make(
         vneditor_path,
         "make",
         "-stripsource",
+        extra_log_exit_strings=["appRequestExit"],
+        extra_error_strings="STEAM is required to play the game",
     )
 
 
@@ -305,6 +316,8 @@ async def vneditor_brew(
         vneditor_path,
         "brewcontent",
         *content,
+        extra_log_exit_strings=["appRequestExit"],
+        extra_error_strings="STEAM is required to play the game",
     )
 
 
