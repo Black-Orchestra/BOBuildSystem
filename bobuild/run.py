@@ -362,7 +362,7 @@ async def ensure_vneditor_modpackages_config(
     await run_vneditor(
         rs2_documents_dir=docs_dir,
         vneditor_path=rs2_config.vneditor_exe,
-        command="",
+        command="help",
         extra_exit_strings=["appRequestExit"],
     )
 
