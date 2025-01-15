@@ -44,7 +44,7 @@ logger.add(
 
 logger.add(
     _log_file,
-    rotation="10 MB",
+    rotation="50 MB",
     retention=5,
     format=bo_log_format,
     enqueue=True,
