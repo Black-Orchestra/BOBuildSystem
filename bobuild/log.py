@@ -50,7 +50,7 @@ logger.add(
     enqueue=True,
 )
 
-logger.info("initialized logging")
+logger.debug("initialized logging")
 
 
 # TODO: multiple loggers for different categories?
