@@ -25,6 +25,7 @@ from bobuild.config import RS2Config
 from bobuild.log import logger
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
+from bobuild.utils import utcnow
 from bobuild.workshop import find_map_names
 from bobuild.workshop import iter_maps
 
@@ -321,6 +322,7 @@ async def check_for_updates(
                 return
 
         started_updating = True
+        start_time = utcnow()
         build_state = TaskBuildState(BuildState.SYNCING)
 
         # TODO: this is to be able to send cancel webhook.
@@ -530,11 +532,16 @@ Mercurial maps commit: {hg_maps_hash}.
             ("UScript compilation errors", str(len(make_errors)), False),
         ]
 
+        stop_time = utcnow()
+        delta = stop_time - start_time
+        success_desc = f"Total duration: {delta}."
+
         await send_webhook(
             url=discord_config.builds_webhook_url,
             embed_title="Build success! :thumbsup:",
             embed_color=discord.Color.green(),
             embed_footer=build_id,
+            embed_description=success_desc,
             fields=success_fields,
         )
 
