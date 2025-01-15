@@ -46,7 +46,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
             self,
             _broker: AsyncBroker,
             redis_url: str | None = None,
-            expiration: int = 60 * 60,
+            expiration: int = 120 * 60,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
         super().__init__(_broker)
@@ -102,7 +102,7 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
     def __init__(
             self,
             redis_url: str | None = None,
-            expiration: int = 60 * 60,
+            expiration: int = 120 * 60,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
         super().__init__()
