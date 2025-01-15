@@ -545,8 +545,7 @@ Mercurial maps commit: {hg_maps_hash}.
             fields=success_fields,
         )
 
-
-    except Exception as e:
+    except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.error("error running task: {}: {}: {}",
                      context.message, type(e).__name__, e)
 
