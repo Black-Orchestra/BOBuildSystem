@@ -436,6 +436,24 @@ Mercurial maps commit: {hg_maps_hash}.
 
         logger.info("task {} done", context.message)
 
+        # TODO: move duplicated stuff into dedicated webhook funcs?
+        fields = [
+            ("Git commit", git_hash, False),
+            ("HG packages commit", hg_pkgs_hash, False),
+            ("HG maps commit", hg_maps_hash, False),
+        ]
+
+        await send_webhook(
+            url=discord_config.builds_webhook_url,
+            embed_title="Build success! :thumbsup:",
+            embed_color=discord.Color.green(),
+            embed_timestamp=utcnow(),
+            # embed_description=desc,
+            embed_footer=context.message.task_id,
+            fields=fields,
+        )
+
+
     except Exception as e:
         logger.error("error running task: {}: {}: {}",
                      context.message, type(e).__name__, e)
@@ -468,22 +486,6 @@ Mercurial maps commit: {hg_maps_hash}.
         raise
     finally:
         if started_updating:
+            pass
             # TODO: middleware should handle this:
             #     await set_update_in_progress(False)
-
-            # TODO: move duplicated stuff into dedicated webhook funcs?
-            fields = [
-                ("Git commit", git_hash, False),
-                ("HG packages commit", hg_pkgs_hash, False),
-                ("HG maps commit", hg_maps_hash, False),
-            ]
-
-            await send_webhook(
-                url=discord_config.builds_webhook_url,
-                embed_title="Build success! :thumbsup:",
-                embed_color=discord.Color.green(),
-                embed_timestamp=utcnow(),
-                # embed_description=desc,
-                embed_footer=context.message.task_id,
-                fields=fields,
-            )
