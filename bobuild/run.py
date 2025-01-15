@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import contextlib
 import re
 from functools import partial
 from pathlib import Path
@@ -247,6 +248,21 @@ async def run_process(
         return ec, None, None
 
 
+async def log_toucher_task(
+        path: Path,
+        stop_event: asyncio.Event,
+) -> None:
+    """Workaround to make VNEditor.exe flush the log since
+    -forcelogflush does not work always for some reason.
+    """
+    while not stop_event.is_set():
+        path.touch(exist_ok=True)
+        with contextlib.suppress(asyncio.TimeoutError):
+            x = await asyncio.wait_for(stop_event.wait(), 1.0)
+            if x:
+                break
+
+
 async def run_vneditor(
         rs2_documents_dir: Path,
         vneditor_path: Path,
@@ -272,14 +288,16 @@ async def run_vneditor(
     )
     watch.start()
 
+    toucher_task = asyncio.create_task(log_toucher_task(log, stop_event))
+
     ec, _, _ = await run_process(
         vneditor_path,
         command,
         *args,
         "-log",
+        "-forcelogflush",
         "-unattended",
         "-useunpublished",
-        "-forcelogflush",
         "-auto",
         "-nopause",
         raise_on_error=raise_on_error,
@@ -290,6 +308,10 @@ async def run_vneditor(
 
     while not stop_event.is_set():
         await asyncio.sleep(0.1)
+
+    toucher_task.cancel()
+    with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+        await asyncio.wait_for(toucher_task, timeout=1.0)
 
     watch.stop()
 
