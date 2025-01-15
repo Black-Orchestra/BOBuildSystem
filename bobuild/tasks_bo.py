@@ -463,14 +463,14 @@ Mercurial maps commit: {hg_maps_hash}.
         logger.info("task {} done", context.message)
 
         # TODO: move duplicated stuff into dedicated webhook funcs?
-        fields = [
+        success_fields = [
             ("Git commit", git_url(git_hash), False),
             ("HG packages commit", hg_pkgs_url(hg_pkgs_hash), False),
             ("HG maps commit", hg_maps_url(hg_maps_hash), False),
-            ("BrewContent warnings", len(brew_warnings), False),
-            ("BrewContent errors", len(brew_errors), False),
-            ("UScript compilation warnings", len(make_warnings), False),
-            ("UScript compilation errors", len(make_errors), False),
+            ("BrewContent warnings", str(len(brew_warnings)), False),
+            ("BrewContent errors", str(len(brew_errors)), False),
+            ("UScript compilation warnings", str(len(make_warnings)), False),
+            ("UScript compilation errors", str(len(make_errors)), False),
         ]
 
         await send_webhook(
@@ -478,7 +478,7 @@ Mercurial maps commit: {hg_maps_hash}.
             embed_title="Build success! :thumbsup:",
             embed_color=discord.Color.green(),
             embed_footer=build_id,
-            fields=fields,
+            fields=success_fields,
         )
 
 
@@ -488,7 +488,7 @@ Mercurial maps commit: {hg_maps_hash}.
 
         # Don't report failures for tasks that had no actual work to do!
         if started_updating:
-            fields = [
+            failure_fields = [
                 ("Git commit", git_url(git_hash), False),
                 ("HG packages commit", hg_pkgs_url(hg_pkgs_hash), False),
                 ("HG maps commit", hg_maps_url(hg_maps_hash), False),
@@ -507,7 +507,7 @@ Mercurial maps commit: {hg_maps_hash}.
                 embed_color=discord.Color.red(),
                 embed_description=desc,
                 embed_footer=build_id,
-                fields=fields,
+                fields=failure_fields,
             )
 
         raise
