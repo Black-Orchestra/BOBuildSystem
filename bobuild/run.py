@@ -81,7 +81,11 @@ class LogEventHandler(AIOEventHandler):
                 self._pos = self._fh.tell()
 
                 if match := LOG_RE.match(line):
-                    if "error reading attributes for" in line.lower():
+                    line_lower = line.lower()
+                    if "error reading attributes for" in line_lower:
+                        # This is always a fake error!
+                        pass
+                    elif "encryptedappticketresponse: biofailure" in line_lower:
                         # This is always a fake error!
                         pass
                     elif match.group(1).lower() == "error":
