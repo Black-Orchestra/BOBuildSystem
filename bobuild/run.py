@@ -22,6 +22,7 @@ from bobuild.config import RS2Config
 from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
 from bobuild.utils import asyncio_run
+from bobuild.utils import kill_process_tree
 
 LOG_RE = re.compile(r"^\[[\d.]+]\s(\w+):(.*)$")
 
@@ -205,14 +206,6 @@ async def run_process(
     else:
         logger.info("running program {}: {}, cwd={}", program, args, cwd)
 
-    proc = await asyncio.create_subprocess_exec(
-        str(program),
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=cwd,
-    )
-
     all_out: list[str] = []
     all_err: list[str] = []
 
@@ -221,23 +214,37 @@ async def run_process(
     else:
         pn = program
 
-    if not proc.stdout:
-        raise RuntimeError(f"process has no stdout: {proc}")
-    if not proc.stderr:
-        raise RuntimeError(f"process has no stderr: {proc}")
+    proc: asyncio.subprocess.Process | None = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            str(program),
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
+        )
 
-    def line_cb(_lines: list[str], _name: str, _line: str):
-        logger.info("{}: {}", _name, _line)
-        if return_output:
-            _lines.append(_line)
+        if not proc.stdout:
+            raise RuntimeError(f"process has no stdout: {proc}")
+        if not proc.stderr:
+            raise RuntimeError(f"process has no stderr: {proc}")
 
-    await asyncio.gather(*(
-        read_stream_task_se(proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event),
-        read_stream_task_se(proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event),
-    ))
+        def line_cb(_lines: list[str], _name: str, _line: str):
+            logger.info("{}: {}", _name, _line)
+            if return_output:
+                _lines.append(_line)
 
-    ec = await proc.wait()
-    logger.info("program {} exited with code: {}", pn, ec)
+        await asyncio.gather(*(
+            read_stream_task_se(proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event),
+            read_stream_task_se(proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event),
+        ))
+
+        ec = await proc.wait()
+        logger.info("program {} exited with code: {}", pn, ec)
+    except (KeyboardInterrupt, Exception, asyncio.CancelledError) as e:
+        logger.error("error: {}: {}", type(e).__name__, e)
+        if proc:
+            await kill_process_tree(proc.pid)
 
     if raise_on_error and ec != 0:
         raise RuntimeError(f"program {program} exited with non-zero exit code: {ec}")
