@@ -507,6 +507,8 @@ Mercurial maps commit: {hg_maps_hash}.
     finally:
         if ids := getattr(broker.state, "ids_", {}):
             try:
+                # TODO: does this run on shutdown?
+                logger.info("ids: {}", ids)
                 del ids[context.message.task_name]
             except KeyError:
                 pass

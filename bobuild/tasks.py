@@ -229,6 +229,7 @@ else:
         #             )
         #
 
+        logger.info("broker state: {}", broker.state)
         if ids := getattr(broker.state, "ids_", {}):
             ids: dict[str, str]
             for task_id in ids:
