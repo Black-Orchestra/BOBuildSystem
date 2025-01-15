@@ -168,7 +168,7 @@ async def send_build_state_update(
 #       For tasks that begin successfully but then fail for some reason halfway?
 @broker.task(
     schedule=[{"cron": "*/1 * * * *"}],
-    timeout=30 * 60,
+    timeout=60 * 60,  # TODO: is an hour still too little time?
     task_name="bobuild.tasks_bo.check_for_updates",
 )
 async def check_for_updates(
