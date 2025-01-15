@@ -245,6 +245,7 @@ async def run_process(
         logger.error("error: {}: {}", type(e).__name__, e)
         if proc:
             await kill_process_tree(proc.pid)
+        raise
 
     if raise_on_error and ec != 0:
         raise RuntimeError(f"program {program} exited with non-zero exit code: {ec}")
@@ -265,8 +266,7 @@ async def log_toucher_task(
     while not stop_event.is_set():
         path.touch(exist_ok=True)
         with contextlib.suppress(asyncio.TimeoutError):
-            x = await asyncio.wait_for(stop_event.wait(), 1.0)
-            if x:
+            if await asyncio.wait_for(stop_event.wait(), 5.0):
                 break
 
 
@@ -297,7 +297,7 @@ async def run_vneditor(
 
     toucher_task = asyncio.create_task(log_toucher_task(log, stop_event))
 
-    ec, _, _ = await run_process(
+    ec, _, stderr = await run_process(
         vneditor_path,
         command,
         *args,
@@ -312,9 +312,11 @@ async def run_vneditor(
     )
 
     logger.info("VNEditor exited with code: {}", ec)
+    stop_event.set()
 
-    while not stop_event.is_set():
-        await asyncio.sleep(0.1)
+    # TODO: was there a point for having this here?
+    # while not stop_event.is_set():
+    #     await asyncio.sleep(0.1)
 
     toucher_task.cancel()
     with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
@@ -324,9 +326,15 @@ async def run_vneditor(
 
     logger.info("Launch.log warnings: {}", len(handler.warnings))
     logger.info("Launch.log errors: {}", len(handler.errors))
-    for error in handler.errors:
+
+    errs = handler.errors
+    if stderr is not None and stderr:
+        errs += stderr
+
+    for error in errs:
         logger.error("Launch.log error: {}", error)
-    if handler.errors:
+
+    if errs:
         errs_str = "\n".join(handler.errors)
         raise RuntimeError("VNEditor.exe failed: {}", errs_str)
 
