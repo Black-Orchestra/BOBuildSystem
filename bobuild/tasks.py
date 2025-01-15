@@ -62,30 +62,34 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
-        global _dummy_data
+        try:
+            global _dummy_data
 
-        if task.task_name != self.unique_task_name:
-            return
+            if task.task_name != self.unique_task_name:
+                return
 
-        if self.pool is None:
-            return
+            if self.pool is None:
+                return
 
-        key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
+            key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
 
-        if self.pool is None:
-            has_key = _dummy_data.get(key, None) is not None
-        else:
-            has_key = await self.pool.get(key) is not None
+            if self.pool is None:
+                has_key = _dummy_data.get(key, None) is not None
+            else:
+                has_key = await self.pool.get(key) is not None
 
-        if has_key:
-            logger.info("task {} is already running, not starting a new one", task.task_name)
-            task.task_name = "bobuild.tasks_bo.bo_dummy_task"
-            return
+            if has_key:
+                logger.info("task {} is already running, not starting a new one", task.task_name)
+                task.task_name = "bobuild.tasks_bo.bo_dummy_task"
+                return
 
-        if self.pool is None:
-            _dummy_data[key] = task.task_name
-        else:
-            await self.pool.set(key, 1, ex=self.expiration)
+            if self.pool is None:
+                _dummy_data[key] = task.task_name
+            else:
+                await self.pool.set(key, 1, ex=self.expiration)
+
+        except Exception as e:
+            logger.exception(e)
 
     @override
     async def shutdown(self):
@@ -119,13 +123,18 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
             message: TaskiqMessage,
             _: TaskiqResult[Any],
     ) -> None:
-        if message.task_name == self.unique_task_name:
-            logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
-            if self.pool is None:
-                global _dummy_data
-                del _dummy_data[message.task_name]
-            else:
-                await self.pool.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
+        # TODO: this never runs if worker is shut down mid-task?
+
+        try:
+            if message.task_name == self.unique_task_name:
+                logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
+                if self.pool is None:
+                    global _dummy_data
+                    del _dummy_data[message.task_name]
+                else:
+                    await self.pool.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
+        except Exception as e:
+            logger.exception(e)
 
     @override
     async def shutdown(self):
@@ -204,42 +213,46 @@ else:
 
     @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
     async def shutdown(state: TaskiqState) -> None:
-        pool: ConnectionPool = state.redis
-        redis: Redis = Redis.from_pool(pool)
+        try:
+            pool: ConnectionPool = state.redis
+            redis: Redis = Redis.from_pool(pool)
 
-        # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
-        #
-        # # TODO: this is getting kinda spaghetti-ey.
-        # async for key in redis.scan_iter(match=f"{UNIQUE_PREFIX}:*"):
-        #     logger.warning("leftover taskiq_unique key: {}", key)
-        #     await redis.delete(key)
-        #
-        # for mw in broker.middlewares:
-        #     if isinstance(mw, UniqueTaskMiddleware):
-        #         tn = mw.unique_task_name
-        #         for
-        #
-        #         if task:
-        #             discord_cfg = DiscordConfig()
-        #             await send_webhook(
-        #                 url=discord_cfg.builds_webhook_url,
-        #                 embed_title="Build cancelled! :warning:",
-        #                 embed_color=discord.Color.yellow(),
-        #                 embed_footer=task.task_id,
-        #             )
-        #
+            # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
+            #
+            # # TODO: this is getting kinda spaghetti-ey.
+            # async for key in redis.scan_iter(match=f"{UNIQUE_PREFIX}:*"):
+            #     logger.warning("leftover taskiq_unique key: {}", key)
+            #     await redis.delete(key)
+            #
+            # for mw in broker.middlewares:
+            #     if isinstance(mw, UniqueTaskMiddleware):
+            #         tn = mw.unique_task_name
+            #         for
+            #
+            #         if task:
+            #             discord_cfg = DiscordConfig()
+            #             await send_webhook(
+            #                 url=discord_cfg.builds_webhook_url,
+            #                 embed_title="Build cancelled! :warning:",
+            #                 embed_color=discord.Color.yellow(),
+            #                 embed_footer=task.task_id,
+            #             )
+            #
 
-        logger.info("broker state: {}", broker.state)
-        if ids := getattr(broker.state, "ids_", {}):
-            ids: dict[str, str]
-            for task_id in ids:
-                discord_cfg = DiscordConfig()
-                await send_webhook(
-                    url=discord_cfg.builds_webhook_url,
-                    embed_title="Build cancelled! :warning:",
-                    embed_color=discord.Color.yellow(),
-                    embed_footer=task_id,
-                )
+            logger.info("broker state: {}", broker.state)
+            if ids := getattr(broker.state, "ids_", {}):
+                ids: dict[str, str]
+                for task_id in ids:
+                    discord_cfg = DiscordConfig()
+                    await send_webhook(
+                        url=discord_cfg.builds_webhook_url,
+                        embed_title="Build cancelled! :warning:",
+                        embed_color=discord.Color.yellow(),
+                        embed_footer=task_id,
+                    )
 
-        await redis.close()
-        await pool.disconnect()
+            await redis.close()
+            await pool.disconnect()
+
+        except Exception as e:
+            logger.exception(e)

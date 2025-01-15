@@ -505,7 +505,8 @@ Mercurial maps commit: {hg_maps_hash}.
 
         raise
     finally:
-        if ids := getattr(broker.state, "ids_", {}):
+        logger.info("broker.state: {}", context.broker.state)
+        if ids := getattr(context.broker.state, "ids_", {}):
             try:
                 # TODO: does this run on shutdown?
                 logger.info("ids: {}", ids)
