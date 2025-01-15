@@ -134,14 +134,16 @@ async def read_stream_task(
 async def read_stream_task_se(
         stream: asyncio.StreamReader,
         callback: Callable[[str], None],
-        stop_event: asyncio.Event,
+        stop_event: asyncio.Event | None = None,
 ) -> None:
-    while not stop_event.is_set():
+    while True:
         if stream.at_eof():
             break
         line = (await stream.readline()).decode("utf-8", errors="replace").rstrip()
         if line:
             callback(line)
+        if stop_event and stop_event.is_set():
+            break
 
 
 async def wait_for(
@@ -203,8 +205,8 @@ async def run_process(
         cwd=cwd,
     )
 
-    all_out = []
-    all_err = []
+    all_out: list[str] = []
+    all_err: list[str] = []
 
     if isinstance(program, Path):
         pn = program.name
@@ -302,7 +304,7 @@ async def vneditor_make(
         "make",
         "-stripsource",
         extra_log_exit_strings=["appRequestExit"],
-        extra_error_strings="STEAM is required to play the game",
+        extra_error_strings=["STEAM is required to play the game"],
     )
 
 
@@ -317,7 +319,7 @@ async def vneditor_brew(
         "brewcontent",
         *content,
         extra_log_exit_strings=["appRequestExit"],
-        extra_error_strings="STEAM is required to play the game",
+        extra_error_strings=["STEAM is required to play the game"],
     )
 
 
