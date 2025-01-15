@@ -377,8 +377,12 @@ async def check_for_updates(
             unpub_pkgs.rglob("*.upk")
         ]
 
-        content_to_brew = ["WW2"] + roe_content + upk_content
-        logger.info("total number of content to brew: {}", len(content_to_brew))
+        total_content_to_brew = ["WW2"] + roe_content + upk_content
+        # TODO: if we list all packages here, we exceed the command line
+        #   length limit of VNEditor.exe. It should still brew them even if
+        #   we don't list them explicitly?
+        content_to_brew = ["WW2"] + roe_content
+        logger.info("total number of content to brew: {}", len(total_content_to_brew))
 
         await bobuild.run.vneditor_brew(
             rs2_config.rs2_documents_dir,
