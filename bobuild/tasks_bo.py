@@ -369,12 +369,12 @@ async def check_for_updates(
 
         roe_content: list[str] = [
             file.stem for file in
-            unpub_maps.rglob(".roe")
+            unpub_maps.rglob("*.roe")
         ]
 
         upk_content: list[str] = [
             file.name for file in
-            unpub_pkgs.rglob(".upk")
+            unpub_pkgs.rglob("*.upk")
         ]
 
         content_to_brew = ["WW2"] + roe_content + upk_content
