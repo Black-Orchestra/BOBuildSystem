@@ -240,8 +240,8 @@ else:
             #
 
             logger.info("broker state: {}", broker.state)
+            ids: dict[str, str]
             if ids := getattr(broker.state, "ids_", {}):
-                ids: dict[str, str]
                 for task_id in ids:
                     discord_cfg = DiscordConfig()
                     await send_webhook(

@@ -248,7 +248,7 @@ async def run_vneditor(
         raise_on_error: bool = False,
         extra_exit_strings: list[str] | None = None,
         extra_error_strings: list[str] | None = None,
-) -> None:
+) -> tuple[list[str], list[str]]:
     stop_event = asyncio.Event()
     logs_dir = rs2_documents_dir / "ROGame/Logs"
     log = logs_dir / "Launch.log"
@@ -294,12 +294,14 @@ async def run_vneditor(
         errs_str = "\n".join(handler.errors)
         raise RuntimeError("VNEditor.exe failed: {}", errs_str)
 
+    return handler.warnings, handler.errors
+
 
 async def vneditor_make(
         rs2_documents_dir: Path,
         vneditor_path: Path,
-) -> None:
-    await run_vneditor(
+) -> tuple[list[str], list[str]]:
+    return await run_vneditor(
         rs2_documents_dir,
         vneditor_path,
         "make",
@@ -314,12 +316,12 @@ async def vneditor_brew(
         rs2_documents_dir: Path,
         vneditor_path: Path,
         content: list[str],
-) -> None:
+) -> tuple[list[str], list[str]]:
     """NOTE: Steam client is required to be running
     in the background for brewcontent commandlet!
     TODO: can we patch this out of the exe?
     """
-    await run_vneditor(
+    return await run_vneditor(
         rs2_documents_dir,
         vneditor_path,
         "brewcontent",
