@@ -315,6 +315,10 @@ async def vneditor_brew(
         vneditor_path: Path,
         content: list[str],
 ) -> None:
+    """NOTE: Steam client is required to be running
+    in the background for brewcontent commandlet!
+    TODO: can we patch this out of the exe?
+    """
     await run_vneditor(
         rs2_documents_dir,
         vneditor_path,
