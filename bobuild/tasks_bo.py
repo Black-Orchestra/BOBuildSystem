@@ -3,6 +3,8 @@ import shutil
 import traceback
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -114,6 +116,44 @@ def hg_maps_url(hash_: str) -> str:
     return f"[{hash_}](https://repo.blackorchestra.net/hg/BO_maps/rev/{hash_})"
 
 
+class BuildState(StrEnum):
+    SYNCING = "Syncing repos."
+    COMPILING = "Compiling script."
+    BREWING = "Brewing content."
+    # PREPARING_UPLOAD = "Preparing Steam Workshop uploads."
+    # UPLOADING = "Uploading to Steam Workshop."
+
+
+@dataclass(slots=True)
+class TaskBuildState:
+    state: BuildState = BuildState(0)
+
+    @property
+    def embed_str(self) -> str:
+        strs = []
+        for i, bs in enumerate(BuildState):
+            if bs == self.state:
+                strs.append(f"{i}. **{bs} <---**")
+            else:
+                strs.append(f"{i}. {bs}")
+
+        return "\n".join(strs)
+
+
+async def send_build_state_update(
+        url: str,
+        build_id: str,
+        build_state: TaskBuildState,
+):
+    await send_webhook(
+        url=url,
+        embed_title="Build started! :tools:",
+        embed_color=discord.Color.light_embed(),
+        embed_description=build_state.embed_str,
+        embed_footer=build_id,
+    )
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 # TODO: we can leave behind long-running garbage processes
@@ -151,6 +191,7 @@ async def check_for_updates(
     git_hash = ""
     hg_pkgs_hash = ""
     hg_maps_hash = ""
+    build_state: TaskBuildState
 
     try:
         logger.info("checking for updates")
@@ -280,6 +321,7 @@ async def check_for_updates(
                 return
 
         started_updating = True
+        build_state = TaskBuildState(BuildState(0))
 
         # TODO: this is to be able to send cancel webhook.
         # TODO: this is getting kinda spaghetti-ey.
@@ -311,7 +353,7 @@ async def check_for_updates(
             url=discord_config.builds_webhook_url,
             embed_title="Build started! :tools:",
             embed_color=discord.Color.light_embed(),
-            embed_description=desc,
+            embed_description=f"{desc}\n\n{build_state.embed_str}",
             embed_footer=build_id,
             fields=fields,
         )
@@ -362,6 +404,12 @@ async def check_for_updates(
 
         # TODO: use UE-Library to find references to required sublevels?
 
+        build_state.state = BuildState.BREWING
+        await send_build_state_update(
+            url=discord_config.builds_webhook_url,
+            build_id=build_id,
+            build_state=build_state,
+        )
         make_warnings, make_errors = await bobuild.run.vneditor_make(
             rs2_config.rs2_documents_dir,
             rs2_config.vneditor_exe,
@@ -384,6 +432,12 @@ async def check_for_updates(
         content_to_brew = ["WW2"] + roe_content
         logger.info("total number of content to brew: {}", len(total_content_to_brew))
 
+        build_state.state = BuildState.COMPILING
+        await send_build_state_update(
+            url=discord_config.builds_webhook_url,
+            build_id=build_id,
+            build_state=build_state,
+        )
         brew_warnings, brew_errors = await bobuild.run.vneditor_brew(
             rs2_config.rs2_documents_dir,
             rs2_config.vneditor_exe,
