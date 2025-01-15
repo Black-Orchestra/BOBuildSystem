@@ -74,12 +74,12 @@ def draw_map_preview_file(
     # For size 59 we can fill up to 36 characters.
     # NOTE: this is just a rough estimate since we are not using a monospace font!
     font_size = 90
-    l = len(map_name)
-    if l > 36:
-        logger.warning("map name longer than 36 characters: {}", l)
-    if l > 22:
+    length = len(map_name)
+    if length > 36:
+        logger.warning("map name longer than 36 characters: {}", length)
+    if length > 22:
         # Swap old_min and old_max for "linear inversion".
-        font_size = int(linear_convert(l, 36, 22, 59, 90))
+        font_size = int(linear_convert(length, 36, 22, 59, 90))
     font = ImageFont.truetype(str(font_file.resolve()), font_size)
 
     draw = ImageDraw.Draw(img)
