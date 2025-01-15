@@ -394,7 +394,7 @@ async def check_for_updates(
             if mn in map_to_unpub_dir:
                 map_unpub_dir = unpub_maps / map_to_unpub_dir[mn]
             else:
-                map_unpub_dir = unpub_maps / m.parent
+                map_unpub_dir = unpub_maps / m.parent.name
 
             map_unpub_dirs[mn] = map_unpub_dir
 
@@ -425,12 +425,15 @@ async def check_for_updates(
             unpub_pkgs.rglob("*.upk")
         ]
 
-        total_content_to_brew = ["WW2"] + roe_content + upk_content
+        logger.info(".roe files to brew: {}", len(roe_content))
+        logger.info(".upk files to brew: {}", len(upk_content))
+
+        total_content_to_brew = len(["WW2"]) + len(roe_content) + len(upk_content)
         # TODO: if we list all packages here, we exceed the command line
         #   length limit of VNEditor.exe. It should still brew them even if
         #   we don't list them explicitly?
         content_to_brew = ["WW2"] + roe_content
-        logger.info("total number of content to brew: {}", len(total_content_to_brew))
+        logger.info("total number of content to brew: {}", total_content_to_brew)
 
         build_state.state = BuildState.BREWING
         await send_build_state_update(
