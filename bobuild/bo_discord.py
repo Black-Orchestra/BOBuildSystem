@@ -57,6 +57,8 @@ async def send_webhook(
             json_serialize=ujson.dumps,
     ) as session:
         webhook: discord.Webhook = discord.Webhook.from_url(url, session=session)
+        length = len(embed) + len(content)
+        logger.info("sending webhook, length={}", length)
         await webhook.send(
             content=content,
             embed=embed,
