@@ -8,9 +8,9 @@ import certifi
 import discord
 import ujson
 
-from bobuild.utils import utcnow
 from bobuild.config import DiscordConfig
 from bobuild.log import logger
+from bobuild.utils import utcnow
 
 _certs = certifi.where()
 _ssl_ctx = ssl.create_default_context(cafile=_certs)
@@ -44,7 +44,7 @@ async def send_webhook(
         embed_description: str | None = None,
         embed_timestamp: datetime.datetime | None = None,
         embed_footer: str | None = None,
-        fields: list[tuple[str, str, bool]] | None = None,
+        embed_fields: list[tuple[str, str, bool]] | None = None,
 ) -> None:
     content = content or ""
 
@@ -58,8 +58,8 @@ async def send_webhook(
         timestamp=embed_timestamp,
     )
     embed.set_footer(text=embed_footer)
-    if fields:
-        for field in fields:
+    if embed_fields:
+        for field in embed_fields:
             embed.add_field(name=field[0], value=field[1], inline=field[2])
 
     async with aiohttp.TCPConnector(ssl=_ssl_ctx) as conn:

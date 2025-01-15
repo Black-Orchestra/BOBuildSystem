@@ -145,6 +145,7 @@ async def send_build_state_update(
         url: str,
         build_id: str,
         build_state: TaskBuildState,
+        fields: list[tuple[str, str, bool]] | None = None,
 ):
     await send_webhook(
         url=url,
@@ -152,6 +153,7 @@ async def send_build_state_update(
         embed_color=discord.Color.light_embed(),
         embed_description=f"Build state:\n{build_state.embed_str}",
         embed_footer=build_id,
+        embed_fields=fields,
     )
 
 
@@ -360,7 +362,7 @@ async def check_for_updates(
             embed_color=discord.Color.light_embed(),
             embed_description=f"{build_state.embed_str}\n\n{desc}",
             embed_footer=build_id,
-            fields=fields,
+            embed_fields=fields,
         )
 
         git_hash = await bobuild.git.get_local_hash(git_config.repo_path)
@@ -454,17 +456,18 @@ async def check_for_updates(
         # TODO: if we list all packages here, we exceed the command line
         #   length limit of VNEditor.exe. It should still brew them even if
         #   we don't list them explicitly?
+        # TODO: maybe brew these in batches?
         content_to_brew = ["WW2"] + roe_content
         logger.info("total number of content to brew: {}", total_content_to_brew)
 
+        pub_pkg: Path
         for pub_pkg in pub_pkgs_dir.rglob("*.upk"):
-            pub_pkg: Path
             if pub_pkg.name not in upk_content:
                 logger.info("removing '{}' from Published content", pub_pkg)
                 pub_pkg.unlink(missing_ok=True)
 
+        pub_map: Path
         for pub_map in pub_maps_dir.rglob("*.roe"):
-            pub_map: Path
             if pub_map.stem not in roe_content:
                 logger.info("removing '{}' from Published content", pub_map)
                 pub_map.unlink(missing_ok=True)
@@ -474,6 +477,10 @@ async def check_for_updates(
             url=discord_config.builds_webhook_url,
             build_id=build_id,
             build_state=build_state,
+            fields=[
+                ("Total .upk files to brew", str(len(upk_content)), False),
+                ("Total .roe files to brew", str(len(roe_content)), False),
+            ]
         )
         brew_warnings, brew_errors = await bobuild.run.vneditor_brew(
             rs2_config.rs2_documents_dir,
@@ -574,7 +581,7 @@ Mercurial maps commit: {hg_maps_hash}.
             embed_color=discord.Color.green(),
             embed_footer=build_id,
             embed_description=success_desc,
-            fields=success_fields,
+            embed_fields=success_fields,
         )
 
     except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
@@ -602,7 +609,7 @@ Mercurial maps commit: {hg_maps_hash}.
                 embed_color=discord.Color.red(),
                 embed_description=desc,
                 embed_footer=build_id,
-                fields=failure_fields,
+                embed_fields=failure_fields,
             )
 
         raise
