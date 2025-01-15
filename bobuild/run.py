@@ -300,47 +300,53 @@ async def run_vneditor(
         logger.error("failed to rename old log file: '{}': {}: {}",
                      log, type(e).__name__, e)
 
-    handler = LogEventHandler(
-        stop_event=stop_event,
-        log_file=log,
-        extra_exit_strings=extra_exit_strings,
-        extra_error_strings=extra_error_strings,
-    )
-    watch = AIOWatchdog(
-        path=logs_dir,
-        recursive=False,
-        event_handler=handler,
-    )
-    watch.start()
+    watch: AIOWatchdog | None = None
+    toucher_task: asyncio.Task | None = None
 
-    toucher_task = asyncio.create_task(log_toucher_task(log, stop_event))
+    try:
+        handler = LogEventHandler(
+            stop_event=stop_event,
+            log_file=log,
+            extra_exit_strings=extra_exit_strings,
+            extra_error_strings=extra_error_strings,
+        )
+        watch = AIOWatchdog(
+            path=logs_dir,
+            recursive=False,
+            event_handler=handler,
+        )
+        watch.start()
 
-    ec, _, stderr = await run_process(
-        vneditor_path,
-        command,
-        *args,
-        "-log",
-        "-forcelogflush",
-        "-unattended",
-        "-useunpublished",
-        "-auto",
-        "-nopause",
-        raise_on_error=raise_on_error,
-        stop_event=stop_event,
-    )
+        toucher_task = asyncio.create_task(log_toucher_task(log, stop_event))
 
-    logger.info("VNEditor exited with code: {}", ec)
-    stop_event.set()
+        ec, _, stderr = await run_process(
+            vneditor_path,
+            command,
+            *args,
+            "-log",
+            "-forcelogflush",
+            "-unattended",
+            "-useunpublished",
+            "-auto",
+            "-nopause",
+            raise_on_error=raise_on_error,
+            stop_event=stop_event,
+        )
 
-    # TODO: was there a point for having this here?
-    # while not stop_event.is_set():
-    #     await asyncio.sleep(0.1)
+        logger.info("VNEditor exited with code: {}", ec)
+        stop_event.set()
 
-    toucher_task.cancel()
-    with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
-        await asyncio.wait_for(toucher_task, timeout=1.0)
+    except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
+        logger.exception(e)
+        raise
+    finally:
+        if toucher_task:
+            toucher_task.cancel()
+            with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+                await asyncio.wait_for(toucher_task, timeout=1.0)
 
-    watch.stop()
+        if watch:
+            watch.stop()
 
     logger.info("Launch.log warnings: {}", len(handler.warnings))
     logger.info("Launch.log errors: {}", len(handler.errors))
@@ -416,8 +422,12 @@ async def patch_shader_cache(
 
 async def ensure_vneditor_modpackages_config(
         rs2_config: RS2Config,
-        mod_packages: list[str],
+        *_,
+        mod_packages: list[str] | None = None,
+        **__,
 ):
+    mod_packages = mod_packages or []
+
     docs_dir = rs2_config.rs2_documents_dir
 
     # Dry-run to make sure config files exist.
@@ -490,7 +500,7 @@ async def main() -> None:
     args = ap.parse_args()
     action = args.action
     logger.info("performing action: {}", action)
-    await action_choices[args.action](rs2_cfg, mod_packages=["WW2"])
+    await action_choices[args.action](rs2_cfg, mod_packages=["WW2"])  # type: ignore[operator]
     logger.info("exiting")
 
 
