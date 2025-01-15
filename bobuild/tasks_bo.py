@@ -364,26 +364,32 @@ async def check_for_updates(
         hg_pkgs_hash = await bobuild.hg.get_local_hash(hg_config.pkg_repo_path)
         hg_maps_hash = await bobuild.hg.get_local_hash(hg_config.maps_repo_path)
 
-        unpub_pkgs = rs2_config.unpublished_dir / "CookedPC/Packages/WW2"
-        unpub_maps = rs2_config.unpublished_dir / "CookedPC/Maps/WW2"
-        pub_pkgs = rs2_config.published_dir / "CookedPC/Packages/WW2"
-        pub_maps = rs2_config.published_dir / "CookedPC/Maps/WW2"
+        unpub_pkgs_dir: Path = rs2_config.unpublished_dir / "CookedPC/Packages/WW2"
+        unpub_maps_dir: Path = rs2_config.unpublished_dir / "CookedPC/Maps/WW2"
+        pub_pkgs_dir: Path = rs2_config.published_dir / "CookedPC/Packages/WW2"
+        pub_maps_dir: Path = rs2_config.published_dir / "CookedPC/Maps/WW2"
 
-        logger.info("removing dir: '{}'", unpub_pkgs)
-        shutil.rmtree(unpub_pkgs, ignore_errors=True)
-        logger.info("removing dir: '{}'", unpub_maps)
-        shutil.rmtree(unpub_maps, ignore_errors=True)
-        logger.info("removing dir: '{}'", pub_pkgs)
-        shutil.rmtree(pub_pkgs, ignore_errors=True)
-        logger.info("removing dir: '{}'", pub_maps)
-        shutil.rmtree(pub_maps, ignore_errors=True)
+        logger.info("cleaning up Unpublished content")
 
-        unpub_pkgs.mkdir(parents=True, exist_ok=True)
-        unpub_maps.mkdir(parents=True, exist_ok=True)
-        pub_pkgs.mkdir(parents=True, exist_ok=True)
-        pub_maps.mkdir(parents=True, exist_ok=True)
+        logger.info("removing dir: '{}'", unpub_pkgs_dir)
+        shutil.rmtree(unpub_pkgs_dir, ignore_errors=True)
+        logger.info("removing dir: '{}'", unpub_maps_dir)
+        shutil.rmtree(unpub_maps_dir, ignore_errors=True)
 
-        copy_tree(hg_config.pkg_repo_path, unpub_pkgs, "*.upk")
+        # NOTE: Since brewing takes fucking ages, only remove
+        #  published content here. After copying fresh unpublished
+        #  content over, delete files from published content
+        #  that do not exist in unpublished. This way we keep
+        #  already-brewed content that does not need to be brewed
+        #  again, while removing any content that was potentially
+        #  removed from the unpublished set in commits.
+
+        unpub_pkgs_dir.mkdir(parents=True, exist_ok=True)
+        unpub_maps_dir.mkdir(parents=True, exist_ok=True)
+        pub_pkgs_dir.mkdir(parents=True, exist_ok=True)
+        pub_maps_dir.mkdir(parents=True, exist_ok=True)
+
+        copy_tree(hg_config.pkg_repo_path, unpub_pkgs_dir, "*.upk")
         # TODO: this is done somewhat manually for now.
         # Determine directories for other maps automatically.
         map_to_unpub_dir = {
@@ -394,9 +400,9 @@ async def check_for_updates(
         for m in iter_maps(hg_config.maps_repo_path):
             mn = m.stem
             if mn in map_to_unpub_dir:
-                map_unpub_dir = unpub_maps / map_to_unpub_dir[mn]
+                map_unpub_dir = unpub_maps_dir / map_to_unpub_dir[mn]
             else:
-                map_unpub_dir = unpub_maps / m.parent.name
+                map_unpub_dir = unpub_maps_dir / m.parent.name
 
             map_unpub_dirs[mn] = map_unpub_dir
 
@@ -419,12 +425,12 @@ async def check_for_updates(
 
         roe_content: list[str] = [
             file.stem for file in
-            unpub_maps.rglob("*.roe")
+            unpub_maps_dir.rglob("*.roe")
         ]
 
         upk_content: list[str] = [
             file.name for file in
-            unpub_pkgs.rglob("*.upk")
+            unpub_pkgs_dir.rglob("*.upk")
         ]
 
         logger.info(".roe files to brew: {}", len(roe_content))
@@ -436,6 +442,18 @@ async def check_for_updates(
         #   we don't list them explicitly?
         content_to_brew = ["WW2"] + roe_content
         logger.info("total number of content to brew: {}", total_content_to_brew)
+
+        for pub_pkg in pub_pkgs_dir.rglob("*.upk"):
+            pub_pkg: Path
+            if pub_pkg.name not in upk_content:
+                logger.info("removing '{}' from Published content", pub_pkg)
+                pub_pkg.unlink(missing_ok=True)
+
+        for pub_map in pub_maps_dir.rglob("*.roe"):
+            pub_map: Path
+            if pub_map.stem not in roe_content:
+                logger.info("removing '{}' from Published content", pub_map)
+                pub_map.unlink(missing_ok=True)
 
         build_state.state = BuildState.BREWING
         await send_build_state_update(
@@ -461,7 +479,7 @@ async def check_for_updates(
         logger.info("preparing main SWS item in '{}'", ww2u_staging_dir)
         ww2u_staging_dir.mkdir(parents=True, exist_ok=True)
 
-        map_names = find_map_names(pub_maps)
+        map_names = find_map_names(pub_maps_dir)
         logger.info("found {} maps for workshop uploads", len(map_names))
 
         fs: list[Future] = []
