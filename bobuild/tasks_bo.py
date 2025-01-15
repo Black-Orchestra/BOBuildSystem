@@ -387,6 +387,10 @@ async def check_for_updates(
         #  again, while removing any content that was potentially
         #  removed from the unpublished set in commits.
 
+        # TODO: should we also do this for unpublished content?
+        #   Only remove content from unpublished that does not exist in repos?
+        #   Then copy over content that has newer timestamp?
+
         unpub_pkgs_dir.mkdir(parents=True, exist_ok=True)
         unpub_maps_dir.mkdir(parents=True, exist_ok=True)
         pub_pkgs_dir.mkdir(parents=True, exist_ok=True)
