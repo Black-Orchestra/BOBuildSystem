@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import shutil
 import traceback
 from concurrent.futures import Future
@@ -28,10 +27,6 @@ from bobuild.workshop import find_map_names
 from bobuild.workshop import iter_maps
 
 _repo_dir = Path(__file__).parent.resolve()
-
-
-def utcnow() -> datetime.datetime:
-    return datetime.datetime.now(tz=datetime.timezone.utc)
 
 
 def redis_dep(context: Annotated[Context, TaskiqDepends()]) -> Redis:
@@ -286,6 +281,12 @@ async def check_for_updates(
 
         started_updating = True
 
+        # TODO: this is to be able to send cancel webhook.
+        # TODO: this is getting kinda spaghetti-ey.
+        if context.broker.state.ids_ is None:
+            context.broker.state.ids_ = {}
+        context.broker.state.ids_[context.message.task_name] = context.message.task_id
+
         fields = []
         desc = "Detected changes in the following repos:"
 
@@ -310,7 +311,6 @@ async def check_for_updates(
             url=discord_config.builds_webhook_url,
             embed_title="Build started! :tools:",
             embed_color=discord.Color.light_embed(),
-            embed_timestamp=utcnow(),
             embed_description=desc,
             embed_footer=build_id,
             fields=fields,
@@ -469,8 +469,7 @@ Mercurial maps commit: {hg_maps_hash}.
             url=discord_config.builds_webhook_url,
             embed_title="Build success! :thumbsup:",
             embed_color=discord.Color.green(),
-            embed_timestamp=utcnow(),
-            # embed_description=desc,
+            # embed_description=desc, # TODO: list some results here?
             embed_footer=build_id,
             fields=fields,
         )
@@ -499,7 +498,6 @@ Mercurial maps commit: {hg_maps_hash}.
                 url=discord_config.builds_webhook_url,
                 embed_title="Build failure! :skull:",
                 embed_color=discord.Color.red(),
-                embed_timestamp=utcnow(),
                 embed_description=desc,
                 embed_footer=build_id,
                 fields=fields,
@@ -507,6 +505,12 @@ Mercurial maps commit: {hg_maps_hash}.
 
         raise
     finally:
+        if context.broker.state.ids_ is not None:
+            try:
+                del context.broker.state.ids_[context.message.task_name]
+            except KeyError:
+                pass
+
         if started_updating:
             pass
             # TODO: middleware should handle this:

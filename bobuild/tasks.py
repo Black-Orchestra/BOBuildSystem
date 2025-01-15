@@ -2,6 +2,7 @@ import logging
 import platform
 from typing import Any
 
+import discord
 from redis.asyncio import ConnectionPool
 from redis.asyncio import Redis
 from taskiq import AsyncBroker
@@ -20,6 +21,8 @@ from taskiq_pg import AsyncpgResultBackend
 from taskiq_redis import ListQueueBroker
 from typing_extensions import override
 
+from bobuild.bo_discord import send_webhook
+from bobuild.config import DiscordConfig
 from bobuild.log import InterceptHandler
 from bobuild.log import logger
 from bobuild.utils import get_var
@@ -202,8 +205,9 @@ else:
     @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
     async def shutdown(state: TaskiqState) -> None:
         pool: ConnectionPool = state.redis
+        redis: Redis = Redis.from_pool(pool)
+
         # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
-        # redis: Redis = Redis.from_pool(pool)
         #
         # # TODO: this is getting kinda spaghetti-ey.
         # async for key in redis.scan_iter(match=f"{UNIQUE_PREFIX}:*"):
@@ -224,5 +228,17 @@ else:
         #                 embed_footer=task.task_id,
         #             )
         #
-        # await redis.close()
+
+        if state.ids_ is not None:
+            ids: dict[str, str] = state.ids_
+            for task_id in ids:
+                discord_cfg = DiscordConfig()
+                await send_webhook(
+                    url=discord_cfg.builds_webhook_url,
+                    embed_title="Build cancelled! :warning:",
+                    embed_color=discord.Color.yellow(),
+                    embed_footer=task_id,
+                )
+
+        await redis.close()
         await pool.disconnect()

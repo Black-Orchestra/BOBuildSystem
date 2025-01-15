@@ -8,6 +8,7 @@ import certifi
 import discord
 import ujson
 
+from bobuild.utils import utcnow
 from bobuild.config import DiscordConfig
 from bobuild.log import logger
 
@@ -46,6 +47,9 @@ async def send_webhook(
         fields: list[tuple[str, str, bool]] | None = None,
 ) -> None:
     content = content or ""
+
+    if embed_timestamp is None:
+        embed_timestamp = utcnow()
 
     embed = discord.Embed(
         title=embed_title,

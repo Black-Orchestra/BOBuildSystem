@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import os
 import platform
 import shutil
@@ -106,3 +107,7 @@ async def kill_process_tree(pid: int) -> None:
     except psutil.Error as e:
         logger.info("cannot kill process tree of: {}: {}: {}",
                     pid, type(e).__name__, e)
+
+
+def utcnow() -> datetime.datetime:
+    return datetime.datetime.now(tz=datetime.timezone.utc)
