@@ -81,7 +81,10 @@ class LogEventHandler(AIOEventHandler):
                 self._pos = self._fh.tell()
 
                 if match := LOG_RE.match(line):
-                    if match.group(1).lower() == "error":
+                    if "error reading attributes for" in line.lower():
+                        # This is always a fake error!
+                        pass
+                    elif match.group(1).lower() == "error":
                         if match.group(2):
                             self._errors.append(line)
                     elif match.group(1).lower() == "warning":
