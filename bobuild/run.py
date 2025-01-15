@@ -31,7 +31,7 @@ class LogEventHandler(AIOEventHandler):
             stop_event: asyncio.Event,
             log_file: Path,
             loop: asyncio.AbstractEventLoop | None = None,
-            extra_log_exit_strings: list[str] | None = None,
+            extra_exit_strings: list[str] | None = None,
             extra_error_strings: list[str] | None = None,
     ):
         super().__init__(loop=loop)
@@ -43,7 +43,7 @@ class LogEventHandler(AIOEventHandler):
         self._pos = 0
         self._warnings: list[str] = []
         self._errors: list[str] = []
-        self._extra_log_exit_strings = extra_log_exit_strings or []
+        self._extra_exit_strings = extra_exit_strings or []
         self._extra_error_strings = extra_error_strings or []
 
     @property
@@ -98,8 +98,8 @@ class LogEventHandler(AIOEventHandler):
 
                 if "Log file closed" in line:
                     log_end = True
-                if self._extra_log_exit_strings and not log_end:
-                    for extra in self._extra_log_exit_strings:
+                if self._extra_exit_strings and not log_end:
+                    for extra in self._extra_exit_strings:
                         if extra in line:
                             log_end = True
                             break
@@ -246,7 +246,7 @@ async def run_vneditor(
         command: str,
         *args: str,
         raise_on_error: bool = False,
-        extra_log_exit_strings: list[str] | None = None,
+        extra_exit_strings: list[str] | None = None,
         extra_error_strings: list[str] | None = None,
 ) -> None:
     stop_event = asyncio.Event()
@@ -255,7 +255,7 @@ async def run_vneditor(
     handler = LogEventHandler(
         stop_event=stop_event,
         log_file=log,
-        extra_log_exit_strings=extra_log_exit_strings,
+        extra_exit_strings=extra_exit_strings,
         extra_error_strings=extra_error_strings,
     )
     watch = AIOWatchdog(
@@ -304,7 +304,7 @@ async def vneditor_make(
         vneditor_path,
         "make",
         "-stripsource",
-        extra_log_exit_strings=["appRequestExit"],
+        extra_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
         raise_on_error=True,
     )
@@ -324,7 +324,7 @@ async def vneditor_brew(
         vneditor_path,
         "brewcontent",
         *content,
-        extra_log_exit_strings=["appRequestExit"],
+        extra_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
         raise_on_error=True,
     )
@@ -361,7 +361,7 @@ async def ensure_vneditor_modpackages_config(
         rs2_documents_dir=docs_dir,
         vneditor_path=rs2_config.vneditor_exe,
         command="",
-        extra_log_exit_strings=["appRequestExit"],
+        extra_exit_strings=["appRequestExit"],
     )
 
     config_file = docs_dir / "ROGame/Config/ROEditor.ini"
