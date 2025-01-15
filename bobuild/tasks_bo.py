@@ -362,7 +362,7 @@ async def check_for_updates(
 
         # TODO: use UE-Library to find references to required sublevels?
 
-        await bobuild.run.vneditor_make(
+        make_warnings, make_errors = await bobuild.run.vneditor_make(
             rs2_config.rs2_documents_dir,
             rs2_config.vneditor_exe,
         )
@@ -384,7 +384,7 @@ async def check_for_updates(
         content_to_brew = ["WW2"] + roe_content
         logger.info("total number of content to brew: {}", len(total_content_to_brew))
 
-        await bobuild.run.vneditor_brew(
+        brew_warnings, brew_errors = await bobuild.run.vneditor_brew(
             rs2_config.rs2_documents_dir,
             rs2_config.vneditor_exe,
             content_to_brew,
@@ -467,13 +467,16 @@ Mercurial maps commit: {hg_maps_hash}.
             ("Git commit", git_url(git_hash), False),
             ("HG packages commit", hg_pkgs_url(hg_pkgs_hash), False),
             ("HG maps commit", hg_maps_url(hg_maps_hash), False),
+            ("BrewContent warnings", len(brew_warnings), False),
+            ("BrewContent errors", len(brew_errors), False),
+            ("UScript compilation warnings", len(make_warnings), False),
+            ("UScript compilation errors", len(make_errors), False),
         ]
 
         await send_webhook(
             url=discord_config.builds_webhook_url,
             embed_title="Build success! :thumbsup:",
             embed_color=discord.Color.green(),
-            # embed_description=desc, # TODO: list some results here?
             embed_footer=build_id,
             fields=fields,
         )
