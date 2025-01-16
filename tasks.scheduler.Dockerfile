@@ -51,5 +51,6 @@ RUN pip install --upgrade pip --no-cache-dir \
     && pip install --no-cache-dir \
     /home/scheduler/dist/bobuild*.whl
 
-CMD ["taskiq", "scheduler", "bobuild.tasks.scheduler", \
-    "--tasks-pattern", "bobuild\tasks_bo.py", "--fs-discover"]
+ENV PATH="$PATH:/home/scheduler/.local/bin/"
+
+CMD ["taskiq", "scheduler", "bobuild.tasks:scheduler"]
