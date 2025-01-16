@@ -1,10 +1,13 @@
 import logging
 import platform
 from typing import Any
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 import discord
 from redis.asyncio import ConnectionPool
 from redis.asyncio import Redis
+from redis.asyncio.connection import parse_url
 from taskiq import AsyncBroker
 from taskiq import InMemoryBroker
 from taskiq import ScheduleSource
@@ -167,10 +170,25 @@ if is_dev_env():
     )
 else:
     REDIS_URL = get_var("BO_REDIS_URL")
+
+    if redis_hostname := get_var("BO_REDIS_HOSTNAME", None):
+        parts = urlparse(REDIS_URL)
+        hostname = parse_url(REDIS_URL)["host"]
+
+        logger.info("replacing hostname in Redis URL: '{}' -> '{}'",
+                    hostname, redis_hostname)
+
+        # TODO: this is unbelievably fucking hacky. Find a proper
+        #   way to do this whole thing here!
+        new_netloc = parts.netloc.replace(hostname, redis_hostname)
+        parts = parts._replace(netloc=new_netloc)
+
+        # TODO: this decoding is probably wrong, but fix later if there are issues!
+        REDIS_URL = urlunparse(parts).decode("utf8")
+
     # TODO: the better way to do this would be to have a separate module for
     #   scheduler that does not cause this env var to be checked!
     is_scheduler_only = get_var("BO_TASK_SCHEDULER", "0") == "1"
-
     if is_scheduler_only:
         logger.info("running in scheduler-only mode, allowing empty BO_POSTGRES_URL")
         PG_URL = get_var("BO_POSTGRES_URL", None)

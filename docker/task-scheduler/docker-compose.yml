@@ -10,6 +10,7 @@ services:
     restart: always
     environment:
       BO_REDIS_URL: ${BO_REDIS_URL}
+      BO_REDIS_HOSTNAME: bo_redis_stack
       BO_TASK_SCHEDULER: 1
 
 networks:
