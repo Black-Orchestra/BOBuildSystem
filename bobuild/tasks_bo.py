@@ -1,5 +1,4 @@
 import asyncio
-import shutil
 import traceback
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
@@ -7,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
+from typing import Iterator
 
 import discord
 from redis.asyncio import Redis
@@ -155,6 +155,12 @@ async def send_build_state_update(
         embed_footer=build_id,
         embed_fields=fields,
     )
+
+
+def find_files(path: Path, pattern: str, min_size: int = 100_000) -> Iterator[Path]:
+    for file in path.rglob(pattern):
+        if file.is_file() and file.stat().st_size >= min_size:
+            yield file
 
 
 # TODO: add custom logger that logs task IDs as extra!
@@ -374,34 +380,33 @@ async def check_for_updates(
         pub_pkgs_dir: Path = rs2_config.published_dir / "CookedPC/Packages/WW2"
         pub_maps_dir: Path = rs2_config.published_dir / "CookedPC/Maps/WW2"
 
+        # Files from HG repos are only copied to Unpublished if their MD5
+        # hash is different. Files in Unpublished that are also not found in
+        # HG repos are then removed. Published files that cannot be found in
+        # Unpublished are then proceeded to be removed. This should ensure a
+        # clean workspace for every build without needing to re-brew everything
+        # again every time, assuming no resonance cascades take place.
         logger.info("cleaning up Unpublished content")
-
-        logger.info("removing dir: '{}'", unpub_pkgs_dir)
-        shutil.rmtree(unpub_pkgs_dir, ignore_errors=True)
-        logger.info("removing dir: '{}'", unpub_maps_dir)
-        shutil.rmtree(unpub_maps_dir, ignore_errors=True)
-
-        # NOTE: Since brewing takes fucking ages, only remove
-        #  published content here. After copying fresh unpublished
-        #  content over, delete files from published content
-        #  that do not exist in unpublished. This way we keep
-        #  already-brewed content that does not need to be brewed
-        #  again, while removing any content that was potentially
-        #  removed from the unpublished set in commits.
-
-        # TODO: should we also do this for unpublished content?
-        #   Only remove content from unpublished that does not exist in repos?
-        #   Then copy over content that has newer timestamp?
-        # TODO: would that be reliable enough? Or should we calculate hashes
-        #   for the files? Such a task should probably be offloaded to a
-        #   separate high-performance program?
 
         unpub_pkgs_dir.mkdir(parents=True, exist_ok=True)
         unpub_maps_dir.mkdir(parents=True, exist_ok=True)
         pub_pkgs_dir.mkdir(parents=True, exist_ok=True)
         pub_maps_dir.mkdir(parents=True, exist_ok=True)
 
-        copy_tree(hg_config.pkg_repo_path, unpub_pkgs_dir, "*.upk")
+        # Package names in UE are globally unique, only need to check file names.
+        hg_source_upks_names = [file.name for file in find_files(hg_config.pkg_repo_path, "*.upk")]
+        hg_source_roes_names = [file.name for file in find_files(hg_config.maps_repo_path, "*.roe")]
+        for unpub_pkg in find_files(unpub_pkgs_dir, "*.upk"):
+            if unpub_pkg.name not in hg_source_upks_names:
+                logger.info("removing package '{}' from Unpublished", unpub_pkg)
+                unpub_pkg.unlink(missing_ok=True)
+        for unpub_roe in find_files(unpub_maps_dir, "*.roe"):
+            if unpub_roe.name not in hg_source_roes_names:
+                logger.info("removing map '{}' from Unpublished", unpub_roe)
+                unpub_roe.unlink(missing_ok=True)
+
+        copy_tree(hg_config.pkg_repo_path, unpub_pkgs_dir, "*.upk", check_md5=True)
+
         # TODO: this is done somewhat manually for now.
         # Determine directories for other maps automatically.
         map_to_unpub_dir = {
@@ -420,7 +425,7 @@ async def check_for_updates(
 
             logger.info("map '{}': Unpublished dir: '{}'", mn, map_unpub_dir)
             map_unpub_dir.mkdir(parents=True, exist_ok=True)
-            copy_tree(m.parent, map_unpub_dir, "*.roe")
+            copy_tree(m.parent, map_unpub_dir, "*.roe", check_md5=True)
 
         # TODO: use UE-Library to find references to required sublevels?
 
