@@ -18,12 +18,11 @@ if platform.system() == "Windows":
     _steamcmd_exe_name = "steamcmd.exe"
 else:
     # TODO: set good defaults for Linux too?
-    _default_steamcmd_install_dir = "TODO"
-    _default_repo_path = "TODO"  # type: ignore[assignment]
-    _default_rs2_game_dir = "TODO"
-    _default_rs2_server_dir = "TODO"
+    _default_steamcmd_install_dir = "__TODO__"
+    _default_repo_path = "__TODO__"  # type: ignore[assignment]
+    _default_rs2_game_dir = "__TODO__"
+    _default_rs2_server_dir = "__TODO__"
     _steamcmd_exe_name = "steamcmd.sh"
-    raise NotImplementedError
 
 
 @dataclass(frozen=True)
