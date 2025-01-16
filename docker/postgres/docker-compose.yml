@@ -11,7 +11,7 @@ services:
       POSTGRESQL_USERNAME: postgres
       POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
       POSTGRESQL_POSTGRES_PASSWORD: ${POSTGRESQL_POSTGRES_PASSWORD}
-    restart: on-failure
+    restart: always
 
 volumes:
   postgresql_data:

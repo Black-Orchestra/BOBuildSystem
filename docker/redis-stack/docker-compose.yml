@@ -12,6 +12,13 @@ services:
     volumes:
       - redis_data:/data
     restart: on-failure
+    networks:
+      - task-network
 
 volumes:
   redis_data:
+
+networks:
+  task-network:
+    driver: bridge
+    name: redis_task_network

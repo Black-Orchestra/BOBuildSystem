@@ -1,0 +1,15 @@
+services:
+  scheduler:
+    image: bo/task_scheduler
+    build:
+      context: ../../
+      dockerfile: tasks.scheduler.Dockerfile
+    container_name: bo_task_scheduler
+    networks:
+      - redis-stack_task-network
+    restart: always
+
+networks:
+  redis-stack_task-network:
+    external: true
+    name: redis_task_network
