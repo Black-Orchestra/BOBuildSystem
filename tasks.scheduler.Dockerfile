@@ -43,16 +43,14 @@ RUN chown -R scheduler:scheduler /home/scheduler/
 USER scheduler
 WORKDIR /home/scheduler/
 
+COPY --chown=scheduler:scheduler task_scheduler.sh .
 COPY --from=builder --chown=scheduler:scheduler /home/scheduler/dist/ ./dist/
 
-RUN ls -lah /home/scheduler/dist/
-
 RUN pip install --upgrade pip --no-cache-dir \
-    && pip install --no-cache-dir \
-    /home/scheduler/dist/bobuild*.whl \
-    --target /home/scheduler/bobuild/
+    && pip install --no-cache-dir --user \
+    /home/scheduler/dist/bobuild*.whl
 
+# TODO: is it bad to hard-code this and assume it's always here?
 ENV PATH="$PATH:/home/scheduler/.local/bin/"
 
-CMD ["taskiq", "scheduler", "bobuild.tasks:scheduler", \
-    "--tasks-pattern", "bobuild/**/tasks*.py", "--fs-discover"]
+ENTRYPOINT ["./task_scheduler.sh"]
