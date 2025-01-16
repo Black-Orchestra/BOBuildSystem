@@ -179,6 +179,34 @@ async def list_maps() -> None:
             print(m)
 
 
+def write_sws_config(
+        out_file: Path,
+        template_file: Path,
+        content_folder: Path,
+        preview_file: Path,
+        published_file_id: int,
+        git_hash: str = "null",
+        hg_pkg_hash: str = "null",
+        hg_maps_hash: str = "null",
+        changenote: str = "",
+):
+    template = vdf.loads(template_file.read_text())
+    template["workshopitem"]["publishedfileid"] = published_file_id
+    template["workshopitem"]["contentfolder"] = str(content_folder.resolve())
+    template["workshopitem"]["previewfile"] = str(preview_file)
+    desc = template["workshopitem"]["description"].format(
+        _git_hash=git_hash,
+        _hg_pkg_hash=hg_pkg_hash,
+        _hg_maps_hash=hg_maps_hash,
+    )
+    template["workshopitem"]["changenote"] = changenote
+    template["workshopitem"]["description"] = desc
+
+    with out_file.open("w") as f:
+        logger.info("writing '{}'", out_file)
+        vdf.dump(template, f, pretty=True, escaped=False)
+
+
 def write_map_sws_config(
         out_file: Path,
         template_file: Path,
