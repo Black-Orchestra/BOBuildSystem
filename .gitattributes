@@ -1,2 +1,4 @@
 *.sql linguist-detectable=true
 *.sql linguist-language=PLpgSQL
+
+task_scheduler.sh eol=lf
