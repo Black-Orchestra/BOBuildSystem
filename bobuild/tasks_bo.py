@@ -429,7 +429,7 @@ async def check_for_updates(
 
         # TODO: use UE-Library to find references to required sublevels?
 
-        ww2u = rs2_config.published_dir / "CookedPC/WW2.u"
+        ww2u = rs2_config.unpublished_dir / "CookedPC/WW2.u"
         logger.info("removing '{}'", ww2u)
         ww2u.unlink(missing_ok=True)
 
