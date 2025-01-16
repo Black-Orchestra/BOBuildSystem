@@ -33,6 +33,7 @@ FROM python:3.13-slim-bookworm
 
 RUN apt -y update \
     && apt install -y --no-install-recommends \
+    dos2unix \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -52,5 +53,7 @@ RUN pip install --upgrade pip --no-cache-dir \
 
 # TODO: is it bad to hard-code this and assume it's always here?
 ENV PATH="$PATH:/home/scheduler/.local/bin/"
+
+RUN dos2unix "./task_scheduler.sh"
 
 ENTRYPOINT ["./task_scheduler.sh"]
