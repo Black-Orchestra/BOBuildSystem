@@ -36,7 +36,7 @@ def iter_maps(
 
     for roe in base_dir.rglob("*.roe"):
         if (any(roe.name.startswith(p) for p in prefixes)
-                and roe.stat().st_size > 4096 * 1024):
+                and roe.stat().st_size > 100_000):
             yield roe
 
 
