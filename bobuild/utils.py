@@ -68,7 +68,7 @@ def copy_file(src: Path, dst: Path, check_md5: bool = False):
             src_md5 = file_digest(src)
             if dst_md5.digest() == src_md5.digest():
                 logger.info("MD5 hashes match for: '{}' == '{}', {} == {}, not copying",
-                            src, dst, src_md5, dst_md5)
+                            src, dst, src_md5.hexdigest(), dst_md5.hexdigest())
                 return
 
     logger.info("copy: '{}' -> '{}'", src, dst)
