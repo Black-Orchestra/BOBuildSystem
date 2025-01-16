@@ -183,8 +183,7 @@ else:
         new_netloc = parts.netloc.replace(hostname, redis_hostname)
         parts = parts._replace(netloc=new_netloc)
 
-        # TODO: this decoding is probably wrong, but fix later if there are issues!
-        REDIS_URL = urlunparse(parts).decode("utf8")
+        REDIS_URL = str(urlunparse(parts))
 
     # TODO: the better way to do this would be to have a separate module for
     #   scheduler that does not cause this env var to be checked!
