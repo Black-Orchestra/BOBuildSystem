@@ -10,8 +10,7 @@ services:
     restart: always
     environment:
       BO_REDIS_URL: ${BO_REDIS_URL}
-      # TODO: this is actually unused by the scheduler, fix later!
-      BO_POSTGRES_URL: ${BO_POSTGRES_URL}
+      BO_TASK_SCHEDULER: 1
 
 networks:
   redis-stack_task-network:

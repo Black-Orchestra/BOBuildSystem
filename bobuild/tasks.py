@@ -167,15 +167,30 @@ if is_dev_env():
     )
 else:
     REDIS_URL = get_var("BO_REDIS_URL")
-    PG_URL = get_var("BO_POSTGRES_URL")
+    # TODO: the better way to do this would be to have a separate module for
+    #   scheduler that does not cause this env var to be checked!
+    is_scheduler_only = get_var("BO_TASK_SCHEDULER", "0") == "1"
 
-    result_backend: AsyncpgResultBackend = AsyncpgResultBackend(
-        dsn=PG_URL,
-        keep_results=True,
-        table_name="taskiq_result",
-        field_for_task_id="Text",
-        serializer=ORJSONSerializer(),
-    )
+    if is_scheduler_only:
+        logger.info("running in scheduler-only mode, allowing empty BO_POSTGRES_URL")
+        PG_URL = get_var("BO_POSTGRES_URL", None)
+    else:
+        PG_URL = get_var("BO_POSTGRES_URL")
+
+    result_backend: AsyncpgResultBackend | None = None
+
+    if is_scheduler_only and PG_URL is None:
+        logger.info(
+            "running in scheduler-only mode, "
+            "BO_POSTGRES_URL is not set, not creating result backend")
+    else:
+        result_backend = AsyncpgResultBackend(
+            dsn=PG_URL,
+            keep_results=True,
+            table_name="taskiq_result",
+            field_for_task_id="Text",
+            serializer=ORJSONSerializer(),
+        )
 
     broker = ListQueueBroker(
         url=REDIS_URL,
@@ -196,11 +211,6 @@ else:
         unique_task_name="bobuild.tasks_bo.check_for_updates",
     )
 
-    # source = RedisScheduleSource(
-    #     url=REDIS_URL,
-    #     serializer=ORJSONSerializer(),
-    # )
-
     scheduler = TaskiqScheduler(
         broker=broker,
         sources=[source],
@@ -219,26 +229,7 @@ else:
             redis: Redis = Redis.from_pool(pool)
 
             # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
-            #
-            # # TODO: this is getting kinda spaghetti-ey.
-            # async for key in redis.scan_iter(match=f"{UNIQUE_PREFIX}:*"):
-            #     logger.warning("leftover taskiq_unique key: {}", key)
-            #     await redis.delete(key)
-            #
-            # for mw in broker.middlewares:
-            #     if isinstance(mw, UniqueTaskMiddleware):
-            #         tn = mw.unique_task_name
-            #         for
-            #
-            #         if task:
-            #             discord_cfg = DiscordConfig()
-            #             await send_webhook(
-            #                 url=discord_cfg.builds_webhook_url,
-            #                 embed_title="Build cancelled! :warning:",
-            #                 embed_color=discord.Color.yellow(),
-            #                 embed_footer=task.task_id,
-            #             )
-            #
+            # TODO: this is getting kinda spaghetti-ey.
 
             logger.info("broker state: {}", broker.state)
             ids: dict[str, str]
