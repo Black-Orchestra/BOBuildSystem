@@ -31,7 +31,7 @@ dependencies = [
     "boltons==24.1.0",
     "certifi==2024.12.14",
     "discord.py==2.4.0",
-    "hachiko @ {root:uri}/submodules/hachiko",
+    "hachiko @ git+https://git@github.com/tuokri/hachiko",
     "httpx==0.28.1",
     "loguru==0.7.3",
     "psutil==6.1.1",
@@ -57,11 +57,5 @@ source = "vcs"
 [tool.hatch.build.hooks.vcs]
 version-file = "bobuild/_version.py"
 
-# TODO: builds section is experimental as this is not really
-#   meant to be distributed as a package.
-
 [tool.hatch.metadata]
 allow-direct-references = true
-
-[tool.hatch.build.targets.wheel.force-include]
-"submodules/hachiko" = "hachiko"
