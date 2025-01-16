@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import hashlib
 import os
 import platform
 import shutil
@@ -54,7 +55,22 @@ def is_dev_env() -> bool:
     return get_var("BO_DEV_ENV", "0") == "1"
 
 
-def copy_file(src: Path, dst: Path):
+# noinspection PyProtectedMember,PyUnresolvedReferences
+def file_digest(path: Path) -> "hashlib._Hash":
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "md5")
+
+
+def copy_file(src: Path, dst: Path, check_md5: bool = False):
+    if check_md5:
+        if dst.exists():
+            dst_md5 = file_digest(dst)
+            src_md5 = file_digest(src)
+            if dst_md5.digest() == src_md5.digest():
+                logger.info("MD5 hashes match for: '{}' == '{}', {} == {}, not copying",
+                            src, dst, src_md5, dst_md5)
+                return
+
     logger.info("copy: '{}' -> '{}'", src, dst)
     shutil.copyfile(src, dst)
 
@@ -63,6 +79,7 @@ def copy_tree(
         src_dir: Path,
         dst_dir: Path,
         src_glob: str | None = None,
+        check_md5: bool = False,
 ):
     src_files: list[Path]
     if src_glob is not None:
@@ -75,7 +92,7 @@ def copy_tree(
     with ThreadPoolExecutor() as executor:
         for file in src_files:
             dst = dst_dir / file.name
-            executor.submit(copy_file, file, dst)
+            executor.submit(copy_file, file, dst, check_md5=check_md5)
 
     for future in fs:
         ex = future.exception()
