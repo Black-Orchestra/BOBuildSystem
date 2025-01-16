@@ -8,6 +8,8 @@ services:
     networks:
       - redis-stack_task-network
     restart: always
+    environment:
+      BO_REDIS_URL: ${BO_REDIS_URL}
 
 networks:
   redis-stack_task-network:
