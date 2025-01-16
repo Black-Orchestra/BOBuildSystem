@@ -194,8 +194,6 @@ else:
 
     broker = ListQueueBroker(
         url=REDIS_URL,
-    ).with_result_backend(
-        result_backend
     ).with_serializer(
         ORJSONSerializer()
     ).with_middlewares(
@@ -204,6 +202,9 @@ else:
             unique_task_name="bobuild.tasks_bo.check_for_updates",
         ),
     )
+
+    if result_backend is not None:
+        broker = broker.with_result_backend(result_backend)
 
     source = UniqueLabelScheduleSource(
         broker,
