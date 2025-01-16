@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 user_site=$(python -m site --user-site)
 export PATH="$PATH:${user_site}"
 
