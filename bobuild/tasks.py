@@ -39,6 +39,7 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 UNIQUE_PREFIX = "taskiq_unique"
 
 _dummy_data: dict[str, str]
+_default_expiration = 180 * 60
 
 
 class UniqueLabelScheduleSource(LabelScheduleSource):
@@ -46,7 +47,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
             self,
             _broker: AsyncBroker,
             redis_url: str | None = None,
-            expiration: int = 120 * 60,
+            expiration: int = _default_expiration,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
         super().__init__(_broker)
@@ -102,7 +103,7 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
     def __init__(
             self,
             redis_url: str | None = None,
-            expiration: int = 120 * 60,
+            expiration: int = _default_expiration,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
         super().__init__()
