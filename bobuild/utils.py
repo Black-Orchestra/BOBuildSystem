@@ -99,6 +99,8 @@ def copy_tree(
         if ex:
             logger.error("future: {}: error: {}", future, ex)
 
+    # TODO: get future result and re-raise error?
+
 
 async def kill_process_tree(pid: int) -> None:
     try:
