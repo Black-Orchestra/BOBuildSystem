@@ -184,14 +184,15 @@ def write_sws_config(
         template_file: Path,
         content_folder: Path,
         preview_file: Path,
-        published_file_id: int,
         git_hash: str = "null",
         hg_pkg_hash: str = "null",
         hg_maps_hash: str = "null",
         changenote: str = "",
+        published_file_id: int | None = None,
 ):
     template = vdf.loads(template_file.read_text())
-    template["workshopitem"]["publishedfileid"] = published_file_id
+    if published_file_id is not None:
+        template["workshopitem"]["publishedfileid"] = published_file_id
     template["workshopitem"]["contentfolder"] = str(content_folder.resolve())
     template["workshopitem"]["previewfile"] = str(preview_file)
     desc = template["workshopitem"]["description"].format(

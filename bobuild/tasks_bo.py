@@ -598,15 +598,16 @@ Mercurial maps commit: {hg_maps_hash}.
             out_file=ww2u_staging_dir / "ww2.vdf",
             template_file=_repo_dir / "workshop/BOBetaTemplate.vdf",
             content_folder=ww2_content_folder,
+            preview_file=_repo_dir / "workshop/bo_beta_workshop_main.png",
+            git_hash=git_hash,
+            hg_pkg_hash=hg_pkgs_hash,
+            hg_maps_hash=hg_maps_hash,
+            changenote=changenote,
         )
 
         # TODO: report this value!
         # ww2_sws_dir_size = dir_size(ww2_content_folder)
 
-        # TODO: when uploading items to workshop, only include the sub-levels
-        #   actually referenced by the main level! It's possible we have multiple
-        #   .roe files in the same map directory that are not used by the actually
-        #   item in question!
         pub_sws_maps = set(iter_maps(pub_maps_dir))
         map_sws_content_folders = {
             m.stem: get_temp_sws_content_dir(sws_content_base_dir, m.stem)
@@ -614,13 +615,37 @@ Mercurial maps commit: {hg_maps_hash}.
         }
         logger.info("found {} maps for workshop uploads", len(map_sws_content_folders))
 
+        logger.info("copying map files to SWS upload content directories")
+        map_fs: list[Future] = []
+        with ThreadPoolExecutor() as executor:
+            # TODO: when uploading items to workshop, only include the sub-levels
+            #   actually referenced by the main level! It's possible we have multiple
+            #   .roe files in the same map directory that are not used by the actually
+            #   item in question!
+            for pub_sws_map in pub_sws_maps:
+                rel_path = pub_sws_map.relative_to(pub_maps_dir)
+                map_content_dir = map_sws_content_folders[pub_sws_map.stem] / rel_path
+                map_content_dir.mkdir(parents=True, exist_ok=True)
+                map_fs.append(executor.submit(
+                    copy_tree,
+                    src_dir=pub_sws_map.parent,
+                    dst_dir=map_content_dir,
+                    src_glob="*.roe",
+                ))
+        map_exs: list[str] = []
+        for mf in map_fs:
+            try:
+                mf.result()
+            except Exception as ex:
+                logger.error("future {} failed with error: {}: {}",
+                             mf, type(ex).__name__, ex)
+                map_exs.append(str(ex))
+        if map_exs:
+            ex_string = "\n".join(map_exs)
+            raise RuntimeError("failed to copy map files to SWS content directories: {}", ex_string)
+
         fs: list[Future[Path]] = []
         with ThreadPoolExecutor() as executor:
-
-            # TODO: copy the map content into correct place here!
-            #   CookedPC/Unpublished/
-            #     -> TEMP_DIR/CookedPC/Published/Maps/WW2/African Front/BlaBla.roe?
-
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
             template_vdf = _repo_dir / "workshop/BOBetaMapTemplate.vdf"
             for map_name, map_content_folder in map_sws_content_folders.items():
@@ -639,7 +664,7 @@ Mercurial maps commit: {hg_maps_hash}.
                     logger.error("failed to determine contentfolder for map '{}'", map_name)
                     continue
 
-                executor.submit(
+                fs.append(executor.submit(
                     prepare_map_for_sws,
                     publishedfileid=publishedfileid,
                     map_name=map_name,
@@ -651,7 +676,7 @@ Mercurial maps commit: {hg_maps_hash}.
                     hg_maps_hash=hg_maps_hash,
                     changenote=changenote,
                     content_folder=content_folder,
-                )
+                ))
 
         map_vdf_configs: list[Path] = []
         exs: list[str] = []
