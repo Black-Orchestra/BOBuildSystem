@@ -30,7 +30,6 @@ from bobuild.log import logger
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
-from bobuild.workshop import find_map_names
 from bobuild.workshop import iter_maps
 from bobuild.workshop import write_sws_config
 
@@ -172,6 +171,8 @@ def find_files(path: Path, pattern: str, min_size: int = 100_000) -> Iterator[Pa
 
 _random_alphanumerics = string.ascii_uppercase + string.ascii_lowercase + string.digits
 
+_tmp_content_dirs: set[Path] = set()
+
 
 def get_temp_sws_content_dir(
         base_dir: Path,
@@ -179,7 +180,20 @@ def get_temp_sws_content_dir(
 ) -> Path:
     random.seed(datetime.datetime.now().timestamp())
     rnd = "".join(random.choice(_random_alphanumerics) for _ in range(16))
-    return base_dir / f"__BO_SWS_{rnd}_{name}/"
+    path = base_dir / f"__BO_SWS_{rnd}_{name}/"
+    if path in _tmp_content_dirs:
+        logger.warning("temporary content path: '{}' already in use", path)
+    _tmp_content_dirs.add(path)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def dir_size(path: Path) -> int:
+    return sum(
+        x.stat().st_size
+        for x in path.iterdir()
+        if x.is_file()
+    )
 
 
 # TODO: add custom logger that logs task IDs as extra!
@@ -545,34 +559,71 @@ Mercurial maps commit: {hg_maps_hash}.
 
         # TODO: for all SWS items, we need to copy the necessary items from
         #   Published to isolated sub-directories:
-        # temp_dir_name/*.int
-        # temp_dir_name/*.ini
-        # temp_dir_name/CookedPC/WW2.u
         # temp_dir_name/CookedPC/Packages/WW2/*.upk
         # temp_dir_name/CookedPC/Maps/WW2/FRONT_NAME/MAP_NAME/*.roe
+
+        sws_content_base_dir = rs2_config.rs2_documents_dir / "sws_upload_temp/"
 
         ww2u_staging_dir = _repo_dir / "workshop/generated/ww2u_staging/"
         logger.info("preparing main SWS item in '{}'", ww2u_staging_dir)
         ww2u_staging_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("writing main SWS item .vdf config")
-        ww2_content_folder = get_temp_sws_content_dir(rs2_config.rs2_documents_dir, "WW2")
+        ww2_content_folder = get_temp_sws_content_dir(sws_content_base_dir, "WW2")
         # TODO: actually put the files in the content folder!
+
+        # TODO: double-check this later!
+        ww2u_pub = rs2_config.published_dir / "CookedPC/WW2.u"
+        ww2u_pub_dst = ww2_content_folder / "CookedPC/WW2.u"
+        logger.info("copying Published WW2.u to SWS content dir: '{}' -> '{}'",
+                    ww2u_pub, ww2u_pub_dst)
+        shutil.copyfile(ww2u_pub, ww2u_pub_dst)
+
+        for ww2_ini in git_config.repo_path.rglob("*.ini"):
+            dst = ww2_content_folder / ww2_ini.name
+            logger.info("copying INI to SWS content dir: '{}' -> '{}'", ww2_ini, dst)
+            shutil.copyfile(ww2_ini, dst)
+        for ww2_int in git_config.repo_path.rglob("*.int"):
+            dst = ww2_content_folder / ww2_int.name
+            logger.info("copying INT to SWS content dir: '{}' -> '{}'", ww2_int, dst)
+            shutil.copyfile(ww2_int, dst)
+
+        # TODO: this does not work correctly if we ever add nested package
+        #   directories such as Packages/WW2/X, Packages/WW2/Y, etc.
+        for pub_pkg in pub_pkgs_dir.rglob("*.upk"):
+            dst = ww2_content_folder / "CookedPC/Packages/WW2" / pub_pkg.name
+            logger.info("copying Published UPK to SWS content dir: '{}' -> '{}'", pub_pkg, dst)
+            shutil.copyfile(pub_pkg, dst)
+
+        logger.info("writing main SWS item .vdf config")
         write_sws_config(
             out_file=ww2u_staging_dir / "ww2.vdf",
             template_file=_repo_dir / "workshop/BOBetaTemplate.vdf",
             content_folder=ww2_content_folder,
         )
 
-        # TODO: smart way to clean up temp folders!
+        # TODO: report this value!
+        # ww2_sws_dir_size = dir_size(ww2_content_folder)
 
-        map_names = find_map_names(pub_maps_dir)
-        logger.info("found {} maps for workshop uploads", len(map_names))
+        # TODO: when uploading items to workshop, only include the sub-levels
+        #   actually referenced by the main level! It's possible we have multiple
+        #   .roe files in the same map directory that are not used by the actually
+        #   item in question!
+        pub_sws_maps = set(iter_maps(pub_maps_dir))
+        map_sws_content_folders = {
+            m.stem: get_temp_sws_content_dir(sws_content_base_dir, m.stem)
+            for m in pub_sws_maps
+        }
+        logger.info("found {} maps for workshop uploads", len(map_sws_content_folders))
 
         fs: list[Future[Path]] = []
         with ThreadPoolExecutor() as executor:
+
+            # TODO: copy the map content into correct place here!
+            #   CookedPC/Unpublished/
+            #     -> TEMP_DIR/CookedPC/Published/Maps/WW2/African Front/BlaBla.roe?
+
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
             template_vdf = _repo_dir / "workshop/BOBetaMapTemplate.vdf"
-            for map_name in map_names:
+            for map_name, map_content_folder in map_sws_content_folders.items():
                 staging_dir = _repo_dir / "workshop/generated/sws_map_staging/" / map_name
                 staging_dir.mkdir(parents=True, exist_ok=True)
 
@@ -583,7 +634,7 @@ Mercurial maps commit: {hg_maps_hash}.
                     continue
 
                 try:
-                    content_folder = map_unpub_dirs[map_name]
+                    content_folder = map_content_folder
                 except KeyError:
                     logger.error("failed to determine contentfolder for map '{}'", map_name)
                     continue
@@ -651,6 +702,8 @@ Mercurial maps commit: {hg_maps_hash}.
             embed_fields=success_fields,
         )
 
+        # TODO: generate some kind of manifest of uploaded workshop content?
+
     except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.error("error running task: {}: {}: {}",
                      context.message, type(e).__name__, e)
@@ -689,6 +742,16 @@ Mercurial maps commit: {hg_maps_hash}.
                 del ids[context.message.task_name]
             except KeyError:
                 pass
+
+        if _tmp_content_dirs:
+            logger.info("cleaning up temporary SWS content dirs")
+            while _tmp_content_dirs:
+                tmp_dir = _tmp_content_dirs.pop()
+                logger.info("removing '{}'", tmp_dir)
+                try:
+                    shutil.rmtree(tmp_dir)
+                except Exception as e:
+                    logger.exception("error removing '{}': {}", tmp_dir, e)
 
         if started_updating:
             pass
