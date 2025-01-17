@@ -189,7 +189,15 @@ class RS2Config:
 
     @cachedproperty
     def rs2_documents_dir(self) -> Path:
-        return Path.home() / "Documents/My Games/Rising Storm 2"
+        return Path.home() / "Documents/My Games/Rising Storm 2/"
+
+    @cachedproperty
+    def documents_config_dir(self):
+        return self.rs2_documents_dir / "ROGame/Config/"
+
+    @cachedproperty
+    def documents_localization_dir(self):
+        return self.rs2_documents_dir / "ROGame/Localization/"
 
     @cachedproperty
     def published_dir(self) -> Path:
