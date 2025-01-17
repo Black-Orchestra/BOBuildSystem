@@ -1,4 +1,8 @@
 import asyncio
+import datetime
+import random
+import shutil
+import string
 import traceback
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +32,7 @@ from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
 from bobuild.workshop import find_map_names
 from bobuild.workshop import iter_maps
+from bobuild.workshop import write_sws_config
 
 _repo_dir = Path(__file__).parent.resolve()
 
@@ -73,7 +78,7 @@ def prepare_map_for_sws(
         hg_pkg_hash: str,
         hg_maps_hash: str,
         changenote: str,
-):
+) -> Path:
     preview_file = staging_dir / f"BOBetaMapImg_{map_name}.png"
     bobuild.workshop.draw_map_preview_file(
         map_name=map_name,
@@ -95,6 +100,8 @@ def prepare_map_for_sws(
         hg_maps_hash=hg_maps_hash,
         changenote=changenote,
     )
+
+    return map_vdf_file
 
 
 @broker.task(
@@ -163,6 +170,18 @@ def find_files(path: Path, pattern: str, min_size: int = 100_000) -> Iterator[Pa
             yield file
 
 
+_random_alphanumerics = string.ascii_uppercase + string.ascii_lowercase + string.digits
+
+
+def get_temp_sws_content_dir(
+        base_dir: Path,
+        name: str,
+) -> Path:
+    random.seed(datetime.datetime.now().timestamp())
+    rnd = "".join(random.choice(_random_alphanumerics) for _ in range(16))
+    return base_dir / f"__BO_SWS_{rnd}_{name}/"
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 # TODO: we can leave behind long-running garbage processes
@@ -176,7 +195,7 @@ def find_files(path: Path, pattern: str, min_size: int = 100_000) -> Iterator[Pa
 #       For tasks that begin successfully but then fail for some reason halfway?
 @broker.task(
     schedule=[{"cron": "*/1 * * * *"}],
-    timeout=120 * 60,
+    timeout=180 * 60,
     task_name="bobuild.tasks_bo.check_for_updates",
 )
 async def check_for_updates(
@@ -336,8 +355,24 @@ async def check_for_updates(
         start_time = utcnow()
         build_state = TaskBuildState(BuildState.SYNCING)
 
+        ww2_inis = git_config.repo_path.rglob("*.ini")
+        rs2_config.documents_config_dir.mkdir(parents=True, exist_ok=True)
+        for ww2_ini in ww2_inis:
+            dst = rs2_config.documents_config_dir / ww2_ini.name
+            logger.info("copying INI '{}' -> '{}'", ww2_ini, dst)
+            shutil.copyfile(ww2_ini, dst)
+        # TODO: update this if there are other language localizations!
+        ww2_ints = git_config.repo_path.rglob("*.int")
+        rs2_int_dir = rs2_config.documents_localization_dir / "INT/"
+        rs2_int_dir.mkdir(parents=True, exist_ok=True)
+        for ww2_int in ww2_ints:
+            dst = rs2_int_dir / ww2_int.name
+            logger.info("copying INT '{}' -> '{}'", ww2_int, dst)
+            shutil.copyfile(ww2_int, dst)
+
         # TODO: this is to be able to send cancel webhook.
         # TODO: this is getting kinda spaghetti-ey.
+        # TODO: does this even work? Need to check later!
         if getattr(context.broker.state, "ids_", None) is None:
             context.broker.state.ids_ = {}
         context.broker.state.ids_[context.message.task_name] = context.message.task_id
@@ -419,7 +454,8 @@ async def check_for_updates(
             if mn in map_to_unpub_dir:
                 map_unpub_dir = unpub_maps_dir / map_to_unpub_dir[mn]
             else:
-                map_unpub_dir = unpub_maps_dir / m.parent.name
+                rel_path = m.relative_to(hg_config.maps_repo_path)
+                map_unpub_dir = unpub_maps_dir / rel_path.parent
 
             map_unpub_dirs[mn] = map_unpub_dir
 
@@ -501,26 +537,44 @@ async def check_for_updates(
             "WW2GameInfo.DummyObject",
         )
 
+        changenote = fr"""
+Git commit: {git_hash}.
+Mercurial packages commit: {hg_pkgs_hash}.
+Mercurial maps commit: {hg_maps_hash}.
+        """
+
+        # TODO: for all SWS items, we need to copy the necessary items from
+        #   Published to isolated sub-directories:
+        # temp_dir_name/*.int
+        # temp_dir_name/*.ini
+        # temp_dir_name/CookedPC/WW2.u
+        # temp_dir_name/CookedPC/Packages/WW2/*.upk
+        # temp_dir_name/CookedPC/Maps/WW2/FRONT_NAME/MAP_NAME/*.roe
+
         ww2u_staging_dir = _repo_dir / "workshop/generated/ww2u_staging/"
         logger.info("preparing main SWS item in '{}'", ww2u_staging_dir)
         ww2u_staging_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("writing main SWS item .vdf config")
+        ww2_content_folder = get_temp_sws_content_dir(rs2_config.rs2_documents_dir, "WW2")
+        # TODO: actually put the files in the content folder!
+        write_sws_config(
+            out_file=ww2u_staging_dir / "ww2.vdf",
+            template_file=_repo_dir / "workshop/BOBetaTemplate.vdf",
+            content_folder=ww2_content_folder,
+        )
+
+        # TODO: smart way to clean up temp folders!
 
         map_names = find_map_names(pub_maps_dir)
         logger.info("found {} maps for workshop uploads", len(map_names))
 
-        fs: list[Future] = []
+        fs: list[Future[Path]] = []
         with ThreadPoolExecutor() as executor:
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
             template_vdf = _repo_dir / "workshop/BOBetaMapTemplate.vdf"
             for map_name in map_names:
                 staging_dir = _repo_dir / "workshop/generated/sws_map_staging/" / map_name
                 staging_dir.mkdir(parents=True, exist_ok=True)
-
-                changenote = fr"""
-Git commit: {git_hash}.
-Mercurial packages commit: {hg_pkgs_hash}.
-Mercurial maps commit: {hg_maps_hash}.
-                """
 
                 try:
                     publishedfileid = rs2_config.bo_dev_beta_map_ids[map_name]
@@ -548,11 +602,15 @@ Mercurial maps commit: {hg_maps_hash}.
                     content_folder=content_folder,
                 )
 
+        map_vdf_configs: list[Path] = []
         exs: list[str] = []
         for f in fs:
-            ex = f.exception()
-            if ex:
-                logger.error("future {} failed with error: {}: {}", f, type(ex).__name__, ex)
+            try:
+                result = f.result()
+                map_vdf_configs.append(result)
+            except Exception as ex:
+                logger.error("future {} failed with error: {}: {}",
+                             f, type(ex).__name__, ex)
                 exs.append(str(ex))
         if exs:
             ex_string = "\n".join(exs)
@@ -562,6 +620,10 @@ Mercurial maps commit: {hg_maps_hash}.
         #   in map_ids_factory(). Is there a nice way to automate creation of new
         #   workshop items? Probably not? At the very least, this task should post
         #   a notification when such a map is found.
+
+        logger.info("building {} workshop items", len(map_vdf_configs))
+        # TODO: send webhook.
+        # TODO: start steamcmd build!
 
         logger.info("task {} done", context.message)
 
