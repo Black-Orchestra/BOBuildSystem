@@ -221,7 +221,7 @@ async def check_for_updates(
         git_config: GitConfig = TaskiqDepends(git_config_dep),
         rs2_config: RS2Config = TaskiqDepends(rs2_config_dep),
         discord_config: DiscordConfig = TaskiqDepends(discord_config_dep),
-        redis: Redis = TaskiqDepends(TaskiqDepends(redis_dep)),
+        redis: Redis = TaskiqDepends(redis_dep),
 ) -> None:
     """NOTE: custom middleware and scheduler should ensure this task
     is "unique". Running multiple instances of this task in parallel
