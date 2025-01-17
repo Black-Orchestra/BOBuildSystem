@@ -1,3 +1,0 @@
-[submodule "submodules/hachiko"]
-	path = submodules/hachiko
-	url = git@github.com:tuokri/hachiko.git
