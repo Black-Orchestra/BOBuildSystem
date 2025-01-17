@@ -26,6 +26,7 @@ Use mypy to check for typing errors:
 
 ```bash
 # From root directory of this repo:
+mypy --install-types  # Only need to run this once, or after adding new packages!
 mypy .
 ```
 
@@ -38,7 +39,15 @@ ruff check .
 
 ## Production deployment
 
-TODO: write deployment instructions.
+Deployment requires Windows on the main worker machine to run VNEditor.exe.
+Some services like Redis, Postgres, task scheduler, etc. can be run on Linux/Docker.
+
+TODO: it's probably possible to run VNEditor.exe on Linux using Wine.
+
+### Environment variables
+
+Several environment variables are required to be set in production deployment.
+TODO: document these.
 
 ## Development TODOs
 
