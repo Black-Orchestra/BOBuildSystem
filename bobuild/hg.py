@@ -87,6 +87,8 @@ async def run_cmd(
 async def repo_exists(path: Path) -> bool:
     p = str(path.resolve())
     ec = (await run_cmd("--cwd", p, "root"))[0]
+    # TODO: this does not detect actual errors that happened
+    #  during execution of the command, even if the repo exists!
     return ec == 0
 
 

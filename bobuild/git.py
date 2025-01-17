@@ -85,6 +85,9 @@ async def repo_exists(repo_path: Path) -> bool:
     if not repo_path.exists():
         return False
 
+    # TODO: this is not reliable for example when the repo
+    #  exists but it has invalid permissions/owner. There's
+    #  no way to detect this from the exit code.
     ec, _, _ = await run_cmd(
         "status",
         cwd=repo_path,
