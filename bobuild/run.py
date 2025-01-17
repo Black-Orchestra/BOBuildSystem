@@ -288,11 +288,8 @@ async def run_vneditor(
 
     # Rename old log file to make sure logs are read from the right file.
     try:
-        with log.open("r") as f:
-            line = f.readline().strip()
-        timestamp = datetime.datetime.strptime(
-            line.split(",")[-1].strip(), "%m/%d/%y %H:%M:%S")
-        ts = timestamp.strftime("%Y.%m.%d-%H.%M.%S")
+        now = datetime.datetime.now()
+        ts = now.strftime("%Y.%m.%d-%H.%M.%S")
         new_file = logs_dir / f"Launch-backup-{ts}.log"
         logger.info("renaming '{}' -> '{}'", log, new_file)
         log.rename(new_file)
