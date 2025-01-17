@@ -46,6 +46,10 @@ _default_expiration = 180 * 60
 
 
 class UniqueLabelScheduleSource(LabelScheduleSource):
+    """Custom schedule source that prevents a task from being
+    sent to the broker if an instance of it is already running.
+    """
+
     def __init__(
             self,
             _broker: AsyncBroker,
@@ -103,6 +107,11 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
 # https://github.com/taskiq-python/taskiq/issues/271
 class UniqueTaskMiddleware(TaskiqMiddleware):
+    """Used together with UniqueLabelScheduleSource to ensure
+    unique task is cleaned up after it finishes in order to allow
+    a new instance of the task to be started.
+    """
+
     def __init__(
             self,
             redis_url: str | None = None,
@@ -127,8 +136,9 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
             message: TaskiqMessage,
             _: TaskiqResult[Any],
     ) -> None:
-        # TODO: this never runs if worker is shut down mid-task?
+        # TODO: what happens if task never saves its result?
 
+        # TODO: this never runs if worker is shut down mid-task?
         try:
             if message.task_name == self.unique_task_name:
                 logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
@@ -249,9 +259,9 @@ else:
             # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
             # TODO: this is getting kinda spaghetti-ey.
 
-            logger.info("broker state: {}", broker.state)
+            logger.info("broker state: {}", state)
             ids: dict[str, str]
-            if ids := getattr(broker.state, "ids_", {}):
+            if ids := getattr(state, "ids_", {}):
                 for task_id in ids:
                     discord_cfg = DiscordConfig()
                     await send_webhook(
