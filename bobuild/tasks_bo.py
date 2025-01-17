@@ -267,16 +267,8 @@ async def check_for_updates(
         #         "cleanup was potentially skipped: {}", old_update_timestamp)
 
         bobuild.hg.ensure_config(hg_config)
-        await bobuild.run.ensure_vneditor_modpackages_config(
-            rs2_config=rs2_config,
-            mod_packages=["WW2"],
-        )
-        await bobuild.run.ensure_roengine_config(
-            rs2_config=rs2_config,
-        )
 
         clone_tasks = []
-
         # TODO: should cloning be a part of this task? Should we just assume
         #  the build server is already set up properly with the repos in place?
 
@@ -430,6 +422,14 @@ async def check_for_updates(
             embed_description=f"{build_state.embed_str}\n\n{desc}",
             embed_footer=build_id,
             embed_fields=fields,
+        )
+
+        await bobuild.run.ensure_vneditor_modpackages_config(
+            rs2_config=rs2_config,
+            mod_packages=["WW2"],
+        )
+        await bobuild.run.ensure_roengine_config(
+            rs2_config=rs2_config,
         )
 
         git_hash = await bobuild.git.get_local_hash(git_config.repo_path)
