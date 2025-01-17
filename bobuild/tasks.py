@@ -70,6 +70,11 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
+        """TODO: this is actually not 100% reliable!
+            - If this expires without having consumed the tasks, we will
+              queue another task! Needs a better solution!
+        """
+
         try:
             global _dummy_data
 

@@ -198,6 +198,9 @@ def dir_size(path: Path) -> int:
 
 # TODO: add custom logger that logs task IDs as extra!
 
+_bo_build_lock_name = "bobuild.tasks_bo.check_for_updates__LOCK"
+
+
 # TODO: we can leave behind long-running garbage processes
 #       such as from VNGame.exe brew and make. Do we make sure
 #       in each module that they clean up their own processes?
@@ -218,6 +221,7 @@ async def check_for_updates(
         git_config: GitConfig = TaskiqDepends(git_config_dep),
         rs2_config: RS2Config = TaskiqDepends(rs2_config_dep),
         discord_config: DiscordConfig = TaskiqDepends(discord_config_dep),
+        redis: Redis = TaskiqDepends(TaskiqDepends(redis_dep)),
 ) -> None:
     """NOTE: custom middleware and scheduler should ensure this task
     is "unique". Running multiple instances of this task in parallel
@@ -227,6 +231,14 @@ async def check_for_updates(
     TODO: split this into more functions.
     TODO: perhaps even use a pipeline?
     """
+    # TODO: should this or should it not be thread-local?
+    # TODO: what happens if this doesn't have a timeout?
+    lock = redis.lock(_bo_build_lock_name, timeout=180 * 60, blocking=True)
+    acquired = await lock.acquire(blocking=True, blocking_timeout=5.0)
+    if not acquired:
+        logger.info("could not acquire task lock, skipping task run")
+        return
+
     started_updating = False
     build_id = f"Build ID {context.message.task_id}"
 
@@ -759,6 +771,11 @@ Mercurial maps commit: {hg_maps_hash}.
 
         raise
     finally:
+        try:
+            await lock.release()
+        except (Exception, KeyboardInterrupt, asyncio.CancelledError):
+            logger.exception("error releasing task lock")
+
         logger.info("broker.state: {}", context.broker.state)
         if ids := getattr(context.broker.state, "ids_", {}):
             try:
