@@ -109,6 +109,10 @@ Write-Output "Installing UE3ShaderCachePatcherCLI..."
 & "$PSScriptRoot\setup\install_shadercachepatcher.ps1"
 CheckExitCode($LASTEXITCODE)
 
+Write-Output "Installing UE3PackageTool..."
+& "$PSScriptRoot\setup\install_packagetool.ps1"
+CheckExitCode($LASTEXITCODE)
+
 Write-Output "Installing SteamCMD..."
 & "$PSScriptRoot\setup\install_steamcmd.ps1"
 # CheckExitCode($LASTEXITCODE) NOTE: skipping this check on purpose!
