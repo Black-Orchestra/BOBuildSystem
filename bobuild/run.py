@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import datetime
 import re
+from collections import deque
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,8 @@ from bobuild.utils import asyncio_run
 from bobuild.utils import kill_process_tree
 
 LOG_RE = re.compile(r"^\[[\d.]+]\s(\w+):(.*)$")
+
+_log_line_buffer: deque[str] = deque(maxlen=200)
 
 
 class LogEventHandler(AIOEventHandler):
@@ -134,6 +137,7 @@ T = TypeVar("T")
 async def read_stream_task(
         stream: asyncio.StreamReader,
         callback: Callable[[str], None],
+        buffer_lines: bool = False,
 ) -> None:
     while True:
         if stream.at_eof():
@@ -141,12 +145,15 @@ async def read_stream_task(
         line = (await stream.readline()).decode("utf-8", errors="replace").rstrip()
         if line:
             callback(line)
+            if buffer_lines:
+                _log_line_buffer.append(line)
 
 
 async def read_stream_task_se(
         stream: asyncio.StreamReader,
         callback: Callable[[str], None],
         stop_event: asyncio.Event | None = None,
+        buffer_lines: bool = False,
 ) -> None:
     while True:
         if stream.at_eof():
@@ -154,6 +161,8 @@ async def read_stream_task_se(
         line = (await stream.readline()).decode("utf-8", errors="replace").rstrip()
         if line:
             callback(line)
+            if buffer_lines:
+                _log_line_buffer.append(line)
         if stop_event and stop_event.is_set():
             break
 
@@ -178,6 +187,7 @@ async def run_process(
         return_output: Literal[True] = ...,
         redact: Callable[[Iterable[str]], list[str]] | None = None,
         stop_event: asyncio.Event | None = None,
+        buffer_lines: bool = False,
 ) -> tuple[int, str, str]:
     ...
 
@@ -191,6 +201,7 @@ async def run_process(
         return_output: Literal[False] = ...,
         redact: Callable[[Iterable[str]], list[str]] | None = None,
         stop_event: asyncio.Event | None = None,
+        buffer_lines: bool = False,
 ) -> tuple[int, None, None]:
     ...
 
@@ -203,6 +214,7 @@ async def run_process(
         return_output: bool = False,
         redact: Callable[[Iterable[str]], list[str]] | None = None,
         stop_event: asyncio.Event | None = None,
+        buffer_lines: bool = False,
 ) -> tuple[int, None | str, None | str]:
     if redact is not None:
         logger.info("running program {}: {}, cwd={}", program, redact(args), cwd)
@@ -238,8 +250,12 @@ async def run_process(
                 _lines.append(_line)
 
         await asyncio.gather(*(
-            read_stream_task_se(proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event),
-            read_stream_task_se(proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event),
+            read_stream_task_se(
+                proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event, buffer_lines
+            ),
+            read_stream_task_se(
+                proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event, buffer_lines
+            ),
         ))
 
         ec = await proc.wait()
@@ -478,6 +494,26 @@ async def ensure_roengine_config(rs2_config: RS2Config, *_, **__):
     with config_file.open("w") as f:
         logger.info("writing config file: '{}'", config_file)
         cfg.write(f, space_around_delimiters=False)
+
+
+async def find_sublevels(
+        level_package_path: Path,
+) -> list[str]:
+    repo_dir = Path(__file__).parent.parent
+    package_tool = Path(repo_dir).resolve() / "bin/UE3PackageTool.exe"
+    if not package_tool.exists():
+        raise RuntimeError(f"UE3PackageTool.exe does not exist in '{package_tool}'")
+
+    _, out, _ = await run_process(
+        str(package_tool.name),
+        "find-sublevels",
+        "-f", str(level_package_path.resolve()),
+        cwd=package_tool.parent,
+        raise_on_error=True,
+        return_output=True,
+    )
+
+    return [x.strip('"') for x in out.split("\n")]
 
 
 async def main() -> None:
