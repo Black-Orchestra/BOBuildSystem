@@ -142,6 +142,7 @@ def draw_map_preview_file(
         fill=font_color,
     )
 
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     img.save(output_file)
 
 
@@ -243,6 +244,7 @@ def write_map_sws_config(
     template["workshopitem"]["changenote"] = changenote
     template["workshopitem"]["description"] = desc
 
+    out_file.parent.mkdir(parents=True, exist_ok=True)
     with out_file.open("w") as f:
         logger.info("writing '{}'", out_file)
         vdf.dump(template, f, pretty=True, escaped=False)
