@@ -478,7 +478,7 @@ async def main() -> None:
     ap.add_argument(
         "--maps-dir",
         help="path to a directory for actions that take map directory as an argument",
-        optional=True,
+        required=False,
     )
 
     args = ap.parse_args()
