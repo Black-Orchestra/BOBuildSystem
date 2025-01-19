@@ -28,6 +28,7 @@ from bobuild.config import MercurialConfig
 from bobuild.config import RS2Config
 from bobuild.log import logger
 from bobuild.run import find_sublevels
+from bobuild.run import log_line_buffer
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
@@ -247,6 +248,11 @@ async def check_for_updates(
     hg_pkgs_hash = ""
     hg_maps_hash = ""
     build_state: TaskBuildState
+
+    brew_warnings: list[str] = []
+    brew_errors: list[str] = []
+    make_warnings: list[str] = []
+    make_errors: list[str] = []
 
     try:
         logger.info("checking for updates")
@@ -475,6 +481,10 @@ async def check_for_updates(
             "RRTE-Beach_Invasion_Sim": "BeachInvasionSim",
         }
 
+        # TODO: use executor here? At least do find_sublevels in executor!
+        # TODO: we should also delete levels from Unpublished here that do not
+        #   start with DRTE or RRTE! Some of the WF levels seem to crash BrewContent
+        #   commandlet!
         map_unpub_dirs: dict[str, Path] = {}
         for m in iter_maps(hg_config.maps_repo_path):
             mn = m.stem
@@ -760,6 +770,10 @@ Mercurial maps commit: {hg_maps_hash}.
                 ("Git commit", git_url(git_hash), False),
                 ("HG packages commit", hg_pkgs_url(hg_pkgs_hash), False),
                 ("HG maps commit", hg_maps_url(hg_maps_hash), False),
+                ("BrewContent warnings", str(len(brew_warnings)), False),
+                ("BrewContent errors", str(len(brew_errors)), False),
+                ("UScript compilation warnings", str(len(make_warnings)), False),
+                ("UScript compilation errors", str(len(make_errors)), False),
             ]
 
             desc = (
@@ -777,6 +791,29 @@ Mercurial maps commit: {hg_maps_hash}.
                 embed_footer=build_id,
                 embed_fields=failure_fields,
             )
+
+            # TODO: handle this:
+            if log_line_buffer:
+                max_len = 1800
+                x = 0
+                lines = []
+                while (log_line := log_line_buffer.popleft()) and (x < max_len):
+                    x += len(log_line)
+                    if x + len(log_line) > max_len:
+                        delta = max_len - x
+                        log_line = log_line[:delta]
+                    lines.append(log_line)
+
+                extra_desc = "\n".join(lines)
+                extra_desc = f"Last log output (1800 characters shown):\n```{extra_desc}```"
+
+                await send_webhook(
+                    url=discord_config.builds_webhook_url,
+                    embed_title="Extra failure information! :exclamation:",
+                    embed_color=discord.Color.red(),
+                    embed_description=extra_desc,
+                    embed_footer=build_id,
+                )
 
         raise
     finally:

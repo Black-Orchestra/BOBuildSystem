@@ -28,8 +28,9 @@ from bobuild.utils import kill_process_tree
 
 LOG_RE = re.compile(r"^\[[\d.]+]\s(\w+):(.*)$")
 
-_log_line_buffer: deque[str] = deque(maxlen=200)
 _repo_dir = Path(__file__).parent.parent
+
+log_line_buffer: deque[str] = deque(maxlen=200)
 
 
 class LogEventHandler(AIOEventHandler):
@@ -40,6 +41,7 @@ class LogEventHandler(AIOEventHandler):
             loop: asyncio.AbstractEventLoop | None = None,
             extra_exit_strings: list[str] | None = None,
             extra_error_strings: list[str] | None = None,
+            buffer_lines: bool = False,
     ):
         super().__init__(loop=loop)
 
@@ -52,6 +54,7 @@ class LogEventHandler(AIOEventHandler):
         self._errors: list[str] = []
         self._extra_exit_strings = extra_exit_strings or []
         self._extra_error_strings = extra_error_strings or []
+        self._buffer_lines = buffer_lines
 
     @property
     def warnings(self) -> list[str]:
@@ -70,6 +73,8 @@ class LogEventHandler(AIOEventHandler):
 
     @override
     async def on_modified(self, event: watchdog.events.FileSystemEvent):
+        global log_line_buffer
+
         path = Path(str(event.src_path))
         if path.name == self._log_filename:
             if not self._fh:
@@ -97,7 +102,12 @@ class LogEventHandler(AIOEventHandler):
                         pass
                     elif match.group(1).lower() == "error":
                         if match.group(2):
-                            self._errors.append(line)
+                            # Not a fatal error.
+                            if ("importtext" in line_lower
+                                    and "property import failed" in line_lower):
+                                self._warnings.append(line)
+                            else:
+                                self._errors.append(line)
                     elif match.group(1).lower() == "warning":
                         if match.group(2):
                             self._warnings.append(line)
@@ -109,6 +119,9 @@ class LogEventHandler(AIOEventHandler):
                 # if os.getenv("GITHUB_ACTIONS"):
                 #     line = unicodedata.normalize("NFKD", line)
                 logger.info("{}: log line: {}", path.name, line.rstrip())
+
+                if self._buffer_lines:
+                    log_line_buffer.append(line)
 
                 if "Log file closed" in line:
                     log_end = True
@@ -147,7 +160,8 @@ async def read_stream_task(
         if line:
             callback(line)
             if buffer_lines:
-                _log_line_buffer.append(line)
+                global log_line_buffer
+                log_line_buffer.append(line)
 
 
 async def read_stream_task_se(
@@ -163,7 +177,8 @@ async def read_stream_task_se(
         if line:
             callback(line)
             if buffer_lines:
-                _log_line_buffer.append(line)
+                global log_line_buffer
+                log_line_buffer.append(line)
         if stop_event and stop_event.is_set():
             break
 
@@ -373,8 +388,10 @@ async def run_vneditor(
         logger.error("Launch.log error: {}", error)
 
     if errs:
-        errs_str = "\n".join(handler.errors)
-        raise RuntimeError("VNEditor.exe failed: {}", errs_str)
+        count = 100
+        errs_str = "\n".join(handler.errors[:count])
+        raise RuntimeError("VNEditor.exe failed: Errors ({} total, only {} shown):\n{}",
+                           len(handler.errors), 100, errs_str)
 
     return handler.warnings, handler.errors
 
@@ -410,7 +427,7 @@ async def vneditor_brew(
         *content,
         extra_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
-        raise_on_error=True,
+        raise_on_error=False,  # Check actual status from logs!
     )
 
 
@@ -485,8 +502,8 @@ async def ensure_roengine_config(rs2_config: RS2Config, *_, **__):
         suppressions.remove("DevLoad")
     if "DevShaders" in suppressions:
         suppressions.remove("DevShaders")
-    if "DevShadersDetailed" in suppressions:
-        suppressions.remove("DevShadersDetailed")
+    # if "DevShadersDetailed" in suppressions:
+    #     suppressions.remove("DevShadersDetailed")
 
     cfg["Core.System"]["Suppress"] = "\n".join(suppressions)
     cfg["LogFiles"]["PurgeLogsDays"] = "365"
