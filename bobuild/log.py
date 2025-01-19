@@ -24,7 +24,8 @@ def _get_var(name: str, default: T | object = _default) -> str | T:
     return os.environ.get(name, cast(T, default))
 
 
-_log_dir = Path(_get_var("BO_LOG_DIR", ".")).resolve()
+_repo_dir = Path(__file__).parent.parent.resolve()
+_log_dir = Path(_get_var("BO_LOG_DIR", str(_repo_dir / "logs/"))).resolve()
 _log_file = _log_dir / _get_var("BO_LOG_FILE", "bobuild.log")
 _log_dir.mkdir(parents=True, exist_ok=True)
 

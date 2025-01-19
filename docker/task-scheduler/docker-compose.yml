@@ -12,6 +12,7 @@ services:
       BO_REDIS_URL: ${BO_REDIS_URL}
       BO_REDIS_HOSTNAME: bo_redis_stack
       BO_TASK_SCHEDULER: 1
+      BO_LOG_FILE: bobuild_scheduler.log
 
 networks:
   redis-stack_task-network:
