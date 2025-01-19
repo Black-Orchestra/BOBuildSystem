@@ -313,6 +313,7 @@ async def run_vneditor(
         raise_on_error: bool = False,
         extra_exit_strings: list[str] | None = None,
         extra_error_strings: list[str] | None = None,
+        buffer_lines: bool = False,
 ) -> tuple[list[str], list[str]]:
     stop_event = asyncio.Event()
     logs_dir = rs2_documents_dir / "ROGame/Logs"
@@ -338,6 +339,7 @@ async def run_vneditor(
             log_file=log,
             extra_exit_strings=extra_exit_strings,
             extra_error_strings=extra_error_strings,
+            buffer_lines=buffer_lines,
         )
         watch = AIOWatchdog(
             path=logs_dir,
@@ -360,6 +362,7 @@ async def run_vneditor(
             "-nopause",
             raise_on_error=raise_on_error,
             stop_event=stop_event,
+            buffer_lines=buffer_lines,
         )
 
         logger.info("VNEditor exited with code: {}", ec)
@@ -408,6 +411,7 @@ async def vneditor_make(
         extra_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
         raise_on_error=True,
+        buffer_lines=True,
     )
 
 
@@ -428,6 +432,7 @@ async def vneditor_brew(
         extra_exit_strings=["appRequestExit"],
         extra_error_strings=["STEAM is required to play the game"],
         raise_on_error=False,  # Check actual status from logs!
+        buffer_lines=True,
     )
 
 
