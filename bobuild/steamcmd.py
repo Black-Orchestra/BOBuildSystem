@@ -18,6 +18,7 @@ import vdf
 from bobuild.config import RS2Config
 from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
+from bobuild.run import read_stream_task
 from bobuild.run import run_process
 from bobuild.utils import asyncio_run
 from bobuild.utils import kill_process_tree
@@ -118,32 +119,24 @@ async def run_cmd(
         if not proc.stderr:
             raise RuntimeError(f"process has no stderr: {proc}")
 
-        while True:
-            if proc.stdout.at_eof() and proc.stderr.at_eof():
-                break
+        def line_cb(_lines: list[str], _name: str, _line: str):
+            logger.info("{}: {}", _name, _line)
+            if return_output:
+                _lines.append(_line)
 
-            out = (await proc.stdout.readline()
-                   ).decode("utf-8", errors="replace").rstrip()
-            if out:
-                logger.info("SteamCMD stdout: {}", out)
-                if return_output:
-                    all_out.append(out)
-            err = (await proc.stderr.readline()
-                   ).decode("utf-8", errors="replace").rstrip()
-            if err:
-                logger.info("SteamCMD stderr: {}", err)
-                if return_output:
-                    all_err.append(err)
+        await asyncio.gather(
+            read_stream_task(proc.stdout, partial(line_cb, all_out, "SteamCMD stdout")),
+            read_stream_task(proc.stderr, partial(line_cb, all_err, "SteamCMD stderr")),
+        )
 
         ec = await proc.wait()
+        logger.info("SteamCMD command exited with code: {}", ec)
 
     except (KeyboardInterrupt, Exception, asyncio.CancelledError) as e:
         logger.error("error: {}: {}", type(e).__name__, e)
         if proc:
             await kill_process_tree(proc.pid)
         raise
-
-    logger.info("SteamCMD command exited with code: {}", ec)
 
     if raise_on_error and ec != 0:
         raise RuntimeError(f"command exited with non-zero exit code: {ec}")
