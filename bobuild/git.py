@@ -64,10 +64,10 @@ async def run_cmd(
         if return_output:
             _lines.append(_line)
 
-    await asyncio.gather(*(
+    await asyncio.gather(
         read_stream_task(proc.stdout, partial(line_cb, all_out, "git stdout")),
         read_stream_task(proc.stderr, partial(line_cb, all_err, "git stderr")),
-    ))
+    )
 
     ec = await proc.wait()
     logger.info("git command exited with code: {}", ec)

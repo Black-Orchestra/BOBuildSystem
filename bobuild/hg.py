@@ -67,10 +67,10 @@ async def run_cmd(
         if return_output:
             _lines.append(_line)
 
-    await asyncio.gather(*(
+    await asyncio.gather(
         read_stream_task(proc.stdout, partial(line_cb, all_out, "hg stdout")),
         read_stream_task(proc.stderr, partial(line_cb, all_err, "hg stderr")),
-    ))
+    )
 
     ec = await proc.wait()
     logger.info("hg command exited with code: {}", ec)
@@ -129,7 +129,7 @@ async def hash_diff(repo_path: Path, repo_url: str) -> tuple[str, str]:
 
 async def incoming(path: Path) -> bool:
     """Returns 0 if there are incoming changes, 1 otherwise."""
-    ec = await run_cmd("incoming", cwd=path)
+    ec = (await run_cmd("incoming", cwd=path))[0]
     return ec == 0
 
 

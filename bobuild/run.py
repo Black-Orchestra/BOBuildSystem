@@ -249,14 +249,14 @@ async def run_process(
             if return_output:
                 _lines.append(_line)
 
-        await asyncio.gather(*(
+        await asyncio.gather(
             read_stream_task_se(
                 proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event, buffer_lines
             ),
             read_stream_task_se(
                 proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event, buffer_lines
             ),
-        ))
+        )
 
         ec = await proc.wait()
         logger.info("program {} exited with code: {}", pn, ec)
