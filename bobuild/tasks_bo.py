@@ -548,7 +548,10 @@ async def check_for_updates(
         #   First we copied everything, then we delete unneeded after.
         #   Refactor to only copy needed, so no need to delete later?
         # DRTEs, RRTEs and their sublevels.
-        allowed_roe_stems = set([m.stem for m in repo_maps] + [x for x in chain(sublevels)])
+        allowed_roe_stems = set(
+            [m.stem for m in repo_maps]
+            + [x for x in chain.from_iterable(sublevels)]
+        )
         all_unpub_roes = unpub_maps_dir.rglob("*.roe")
         for unpub_roe in all_unpub_roes:
             if unpub_roe.stem not in allowed_roe_stems:
