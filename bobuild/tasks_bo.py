@@ -943,7 +943,7 @@ Mercurial maps commit: {hg_maps_hash}.
                 embed_fields=failure_fields,
             )
 
-            logger.info("log_line_buffer={}, len=", log_line_buffer, len(log_line_buffer))
+            logger.info("log_line_buffer len={}", len(log_line_buffer))
             if log_line_buffer:
                 max_len = 1800
                 x = 0
