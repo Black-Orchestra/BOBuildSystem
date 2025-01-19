@@ -89,7 +89,8 @@ def copy_tree(
         src_files = [x for x in src_dir.glob("*") if x.is_file()]
 
     if src_stems is not None:
-        src_files = [x for x in src_files if x.stem in src_stems]
+        src_stems_lower = [src_stem.lower() for src_stem in src_stems]
+        src_files = [x for x in src_files if x.stem.lower() in src_stems_lower]
 
     # TODO: this needs improved handling for recursive dirs!
     fs: list[Future] = []
