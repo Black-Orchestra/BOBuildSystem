@@ -29,6 +29,7 @@ from bobuild.utils import kill_process_tree
 LOG_RE = re.compile(r"^\[[\d.]+]\s(\w+):(.*)$")
 
 _log_line_buffer: deque[str] = deque(maxlen=200)
+_repo_dir = Path(__file__).parent.parent
 
 
 class LogEventHandler(AIOEventHandler):
@@ -418,8 +419,7 @@ async def patch_shader_cache(
         shader_cache_path: str,
         object_to_patch_path: str,
 ):
-    repo_dir = Path(__file__).parent.parent
-    patcher = Path(repo_dir).resolve() / "bin/UE3ShaderCachePatcherCLI.exe"
+    patcher = Path(_repo_dir).resolve() / "bin/UE3ShaderCachePatcherCLI.exe"
     if not patcher.exists():
         raise RuntimeError(f"UE3ShaderCachePatcherCLI.exe does not exist in '{patcher}'")
 
@@ -496,18 +496,23 @@ async def ensure_roengine_config(rs2_config: RS2Config, *_, **__):
         cfg.write(f, space_around_delimiters=False)
 
 
+async def test_find_sublevels(rs2_config: RS2Config, *_, **__) -> None:
+    any_map = next(rs2_config.unpublished_dir.rglob("*.roe"))
+    any_map or next(rs2_config.published_dir.glob("*.roe"))
+    await find_sublevels(any_map)
+
+
 async def find_sublevels(
         level_package_path: Path,
 ) -> list[str]:
-    repo_dir = Path(__file__).parent.parent
-    package_tool = Path(repo_dir).resolve() / "bin/UE3PackageTool.exe"
+    package_tool = Path(_repo_dir).resolve() / "bin/UE3PackageTool.exe"
     if not package_tool.exists():
         raise RuntimeError(f"UE3PackageTool.exe does not exist in '{package_tool}'")
 
     _, out, _ = await run_process(
         str(package_tool.name),
         "find-sublevels",
-        "-f", str(level_package_path.resolve()),
+        "-f", str(level_package_path.absolute()),
         cwd=package_tool.parent,
         raise_on_error=True,
         return_output=True,
@@ -523,6 +528,7 @@ async def main() -> None:
     action_choices = {
         "configure_sdk": ensure_vneditor_modpackages_config,
         "configure_roengine": ensure_roengine_config,
+        "test_find_sublevels": test_find_sublevels,
     }
     ap.add_argument(
         "action",
