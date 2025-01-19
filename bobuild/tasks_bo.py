@@ -27,6 +27,7 @@ from bobuild.config import GitConfig
 from bobuild.config import MercurialConfig
 from bobuild.config import RS2Config
 from bobuild.log import logger
+from bobuild.run import find_sublevels
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
@@ -485,11 +486,18 @@ async def check_for_updates(
 
             map_unpub_dirs[mn] = map_unpub_dir
 
+            sublevels = await find_sublevels(m)
+            logger.info("map '{}' sublevels: {}", mn, sublevels)
+
             logger.info("map '{}': Unpublished dir: '{}'", mn, map_unpub_dir)
             map_unpub_dir.mkdir(parents=True, exist_ok=True)
-            copy_tree(m.parent, map_unpub_dir, "*.roe", check_md5=True)
-
-        # TODO: use UE-Library to find references to required sublevels?
+            copy_tree(
+                m.parent,
+                map_unpub_dir,
+                src_glob="*.roe",
+                src_stems=sublevels + [mn],
+                check_md5=True,
+            )
 
         ww2u = rs2_config.unpublished_dir / "CookedPC/WW2.u"
         logger.info("removing '{}'", ww2u)
@@ -643,6 +651,7 @@ Mercurial maps commit: {hg_maps_hash}.
                     src_dir=pub_sws_map.parent,
                     dst_dir=map_content_dir,
                     src_glob="*.roe",
+                    check_md5=False,
                 ))
         map_exs: list[str] = []
         for mf in map_fs:

@@ -79,6 +79,7 @@ def copy_tree(
         src_dir: Path,
         dst_dir: Path,
         src_glob: str | None = None,
+        src_stems: list[str] | None = None,
         check_md5: bool = False,
 ):
     src_files: list[Path]
@@ -86,6 +87,9 @@ def copy_tree(
         src_files = [x for x in src_dir.glob(src_glob) if x.is_file()]
     else:
         src_files = [x for x in src_dir.glob("*") if x.is_file()]
+
+    if src_stems is not None:
+        src_files = [x for x in src_files if x.stem in src_stems]
 
     # TODO: this needs improved handling for recursive dirs!
     fs: list[Future] = []
