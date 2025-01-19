@@ -424,7 +424,7 @@ async def patch_shader_cache(
         raise RuntimeError(f"UE3ShaderCachePatcherCLI.exe does not exist in '{patcher}'")
 
     await run_process(
-        str(patcher.name),
+        patcher,
         "-f", str(script_package_path.resolve()),
         "-s", shader_cache_path,
         "-p", object_to_patch_path,
@@ -510,7 +510,7 @@ async def find_sublevels(
         raise RuntimeError(f"UE3PackageTool.exe does not exist in '{package_tool}'")
 
     _, out, _ = await run_process(
-        str(package_tool.name),
+        package_tool,
         "find-sublevels",
         "-f", str(level_package_path.absolute()),
         cwd=package_tool.parent,
