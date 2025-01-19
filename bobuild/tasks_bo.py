@@ -132,8 +132,9 @@ class BuildState(StrEnum):
     SYNCING = "Syncing repos."
     COMPILING = "Compiling scripts."
     BREWING = "Brewing content."
-    # PREPARING_UPLOAD = "Preparing Steam Workshop uploads."
-    # UPLOADING = "Uploading to Steam Workshop."
+    # SWS_PREPARING_UPLOAD = "Preparing Steam Workshop uploads."
+    # SWS_UPLOADING = "Uploading to Steam Workshop."
+    FINISHED = "Finished."
 
 
 @dataclass(slots=True)
@@ -222,17 +223,9 @@ async def gather(*tasks: asyncio.Future[T] | Awaitable[T]) -> list[T]:
                 pass
 
 
-# TODO: add custom logger that logs task IDs as extra!
-
 _bo_build_lock_name = "bobuild.tasks_bo.check_for_updates__LOCK"
 
 
-# TODO: we can leave behind long-running garbage processes
-#       such as from VNGame.exe brew and make. Do we make sure
-#       in each module that they clean up their own processes?
-#       Additionally, we need to make sure
-# TODO: store PIDs of potentially problematic programs (VNGame.exe)
-#       in Redis behind unique keys?
 # TODO: return a result from this task?
 # TODO: store hashes in metadata so we can retry a failed task for the hashes?
 #       For tasks that begin successfully but then fail for some reason halfway?
@@ -394,7 +387,7 @@ async def check_for_updates(
         else:
             logger.info("no repo sync tasks, all up to date")
             if any((cloned_git, cloned_hg_pkgs, cloned_hg_maps)):
-                # TODO: do something here? Log?
+                logger.info("found work to be done, proceeding with main task")
                 pass
             else:
                 logger.info("no further work to be done")
@@ -505,9 +498,6 @@ async def check_for_updates(
             "RRTE-Beach_Invasion_Sim": "BeachInvasionSim",
         }
 
-        # TODO: we should also delete levels from Unpublished here that do not
-        #   start with DRTE or RRTE! Some of the WF levels seem to crash BrewContent
-        #   commandlet!
         map_unpub_dirs: dict[str, Path] = {}
         repo_maps = list(iter_maps(hg_config.maps_repo_path))
 
@@ -547,14 +537,14 @@ async def check_for_updates(
         # TODO: doing a bit of duplicated work here, refactor later?
         #   First we copied everything, then we delete unneeded after.
         #   Refactor to only copy needed, so no need to delete later?
-        # DRTEs, RRTEs and their sublevels.
+        # Allowed .roe files are DRTEs, RRTEs and their sublevels.
         allowed_roe_stems = set(
-            [m.stem for m in repo_maps]
-            + [x for x in chain.from_iterable(sublevels)]
+            [m.stem.lower() for m in repo_maps]
+            + [x.lower() for x in chain.from_iterable(sublevels)]
         )
         all_unpub_roes = unpub_maps_dir.rglob("*.roe")
         for unpub_roe in all_unpub_roes:
-            if unpub_roe.stem not in allowed_roe_stems:
+            if unpub_roe.stem.lower() not in allowed_roe_stems:
                 logger.info("removing map '{}' from Unpublished", unpub_roe)
                 unpub_roe.unlink(missing_ok=True)
 
@@ -630,6 +620,13 @@ async def check_for_updates(
             "WW2GameInfo.DummyObject",
         )
 
+        # build_state.state = BuildState.SWS_PREPARING_UPLOAD
+        # await send_build_state_update(
+        #     url=discord_config.builds_webhook_url,
+        #     build_id=build_id,
+        #     build_state=build_state,
+        # )
+
         changenote = fr"""
 Git commit: {git_hash}.
 Mercurial packages commit: {hg_pkgs_hash}.
@@ -693,10 +690,6 @@ Mercurial maps commit: {hg_maps_hash}.
         logger.info("copying map files to SWS upload content directories")
         map_fs: list[Future] = []
         with ThreadPoolExecutor() as executor:
-            # TODO: when uploading items to workshop, only include the sub-levels
-            #   actually referenced by the main level! It's possible we have multiple
-            #   .roe files in the same map directory that are not used by the actually
-            #   item in question!
             for pub_sws_map in pub_sws_maps:
                 rel_path = pub_sws_map.relative_to(pub_maps_dir)
                 map_content_dir = map_sws_content_folders[pub_sws_map.stem] / rel_path
@@ -773,9 +766,18 @@ Mercurial maps commit: {hg_maps_hash}.
         #   workshop items? Probably not? At the very least, this task should post
         #   a notification when such a map is found.
 
-        logger.info("building {} workshop items", len(map_vdf_configs))
-        # TODO: send webhook.
-        # TODO: start steamcmd build!
+        logger.info("building {} workshop items", len(map_vdf_configs) + 1)
+        # build_state.state = BuildState.SWS_UPLOADING
+        # await send_build_state_update(
+        #     url=discord_config.builds_webhook_url,
+        #     build_id=build_id,
+        #     build_state=build_state,
+        #     fields=[
+        #         ("Total items to upload", str(len(map_vdf_configs) + 1), False),
+        #     ],
+        # )
+
+        # TODO: start steamcmd build! Main mod first, then maps!
 
         logger.info("task {} done", context.message)
 
@@ -792,7 +794,7 @@ Mercurial maps commit: {hg_maps_hash}.
 
         stop_time = utcnow()
         delta = stop_time - start_time
-        success_desc = f"Total duration: {delta}."
+        success_desc = f"Build state:\n{build_state.embed_str}\nTotal duration: {delta}."
 
         await send_webhook(
             url=discord_config.builds_webhook_url,
@@ -842,15 +844,15 @@ Mercurial maps commit: {hg_maps_hash}.
                 max_len = 1800
                 x = 0
                 lines = []
-                while (log_line := log_line_buffer.popleft()) and (x < max_len):
+                while (log_line := log_line_buffer.pop()) and (x < max_len):
                     x += len(log_line)
                     if x + len(log_line) > max_len:
                         len_diff = max_len - x
                         log_line = log_line[:len_diff]
                     lines.append(log_line)
 
-                extra_desc = "\n".join(lines)
-                extra_desc = f"Last log output (1800 characters shown):\n```{extra_desc}```"
+                extra_desc = "\n".join(reversed(lines))
+                extra_desc = f"Last log output (max 1800 characters shown):\n```{extra_desc}```"
 
                 await send_webhook(
                     url=discord_config.builds_webhook_url,
