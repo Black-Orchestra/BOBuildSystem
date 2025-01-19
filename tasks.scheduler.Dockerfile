@@ -20,7 +20,6 @@ COPY --chown=scheduler:scheduler bobuild/ ./bobuild/
 COPY --chown=scheduler:scheduler .gitmodules .
 COPY --chown=scheduler:scheduler pyproject.toml .
 COPY --chown=scheduler:scheduler README.md .
-COPY --chown=scheduler:scheduler submodules/ ./submodules/
 
 RUN pip install --upgrade pip --no-cache-dir \
     && pip install --no-cache-dir \
