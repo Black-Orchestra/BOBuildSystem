@@ -376,6 +376,7 @@ async def run_vneditor(
             toucher_task.cancel()
             with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
                 await asyncio.wait_for(toucher_task, timeout=1.0)
+            del toucher_task  # TODO: is this necessary?
 
         if watch:
             watch.stop()
