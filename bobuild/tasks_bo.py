@@ -42,7 +42,7 @@ from bobuild.utils import utcnow
 from bobuild.workshop import iter_maps
 from bobuild.workshop import write_sws_config
 
-_repo_dir = Path(__file__).parent.resolve()
+_repo_dir = Path(__file__).parent.parent.resolve()
 
 
 def redis_dep(context: Annotated[Context, TaskiqDepends()]) -> Redis:
@@ -686,6 +686,7 @@ Mercurial maps commit: {hg_maps_hash}.
 
         logger.info("writing main SWS item .vdf config")
         ww2_sws_vdf_config_path = ww2u_staging_dir / "ww2.vdf"
+        ww2_sws_vdf_config_path.parent.mkdir(parents=True, exist_ok=True)
         write_sws_config(
             out_file=ww2_sws_vdf_config_path,
             template_file=_repo_dir / "workshop/BOBetaTemplate.vdf",
