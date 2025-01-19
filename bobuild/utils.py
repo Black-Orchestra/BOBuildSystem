@@ -61,6 +61,10 @@ def file_digest(path: Path) -> "hashlib._Hash":
         return hashlib.file_digest(f, "md5")
 
 
+def file_hexdigest(path: Path) -> str:
+    return file_digest(path).hexdigest()
+
+
 def copy_file(src: Path, dst: Path, check_md5: bool = False):
     if check_md5:
         if dst.exists():

@@ -1,10 +1,13 @@
 import argparse
+import datetime
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Generator
 
+import orjson
 import vdf
 from PIL import Image
 from PIL import ImageDraw
@@ -16,6 +19,8 @@ from bobuild.log import logger
 from bobuild.steamcmd import get_steamguard_code
 from bobuild.steamcmd import workshop_build_item_many
 from bobuild.utils import asyncio_run
+from bobuild.utils import file_digest
+from bobuild.utils import file_hexdigest
 
 _file_dir = Path(__file__).parent.resolve()
 _repo_dir = _file_dir.parent
@@ -25,6 +30,17 @@ _glow_y = 4
 
 # BO red is cc1417.
 _bo_red = (204, 20, 23)
+
+
+@dataclass(slots=True, frozen=True)
+class WorkshopManifest:
+    workshop_item_id: int
+    git_hash: str
+    hg_packages_hash: str
+    hg_maps_hash: str
+    build_id: str
+    build_time_utc: datetime.datetime
+    file_to_md5: dict[Path, str]
 
 
 def iter_maps(
@@ -352,6 +368,70 @@ async def first_time_upload_all_maps(
         name_to_id[map_name] = sws_id
 
     logger.info("{}", pformat(name_to_id))
+
+
+def calculate_file_md5_hashes(path: Path) -> dict[Path, str]:
+    results = {}
+    for file in [x for x in path.rglob("*") if x.is_file()]:
+        results[file] = file_digest(file).hexdigest()
+    return results
+
+
+def make_sws_manifest(
+        out_file: Path,
+        content_folder: Path,
+        content_folder_parent: Path,
+        item_id: int,
+        git_hash: str,
+        hg_packages_hash: str,
+        hg_maps_hash: str,
+        build_id: str,
+        build_time_utc: datetime.datetime,
+        executor: ThreadPoolExecutor | None = None,
+) -> WorkshopManifest:
+    file_to_md5: dict[Path, str] = {}
+
+    if executor:
+        md5_future: Future[dict[Path, str]] = executor.submit(
+            calculate_file_md5_hashes,
+            content_folder,
+        )
+        file_to_md5 = md5_future.result()
+    else:
+        md5_futures: dict[Path, Future[str]] = {}
+        with ThreadPoolExecutor() as executor:
+            for file in [x for x in content_folder.rglob("*") if x.is_file()]:
+                md5_futures[file] = executor.submit(
+                    file_hexdigest,
+                    file,
+                )
+        for file, md5_fut in md5_futures.items():
+            file_to_md5[file] = md5_fut.result()
+
+    file_to_md5 = {
+        file.relative_to(content_folder_parent): md5
+        for file, md5 in file_to_md5.items()
+    }
+
+    manifest = WorkshopManifest(
+        workshop_item_id=item_id,
+        git_hash=git_hash,
+        hg_packages_hash=hg_packages_hash,
+        hg_maps_hash=hg_maps_hash,
+        build_id=build_id,
+        build_time_utc=build_time_utc,
+        file_to_md5=file_to_md5,
+    )
+
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    with out_file.open("rb") as f:
+        logger.info("writing SWS manifest: '{}'", out_file)
+        f.write(orjson.dumps(
+            manifest,
+            option=orjson.OPT_INDENT_2 | orjson.OPT_APPEND_NEWLINE | orjson.OPT_SORT_KEYS
+        ))
+
+    return manifest
 
 
 async def main() -> None:

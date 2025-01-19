@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import math
+import os
 import random
 import shutil
 import string
@@ -39,7 +41,9 @@ from bobuild.steamcmd import workshop_build_item_many
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
+from bobuild.workshop import WorkshopManifest
 from bobuild.workshop import iter_maps
+from bobuild.workshop import make_sws_manifest
 from bobuild.workshop import write_sws_config
 
 _repo_dir = Path(__file__).parent.parent.resolve()
@@ -90,6 +94,7 @@ def prepare_map_for_sws(
         hg_pkg_hash: str,
         hg_maps_hash: str,
         changenote: str,
+        build_id: str,
 ) -> Path:
     preview_file = staging_dir / f"BOBetaMapImg_{map_name}.png"
     bobuild.workshop.draw_map_preview_file(
@@ -111,6 +116,7 @@ def prepare_map_for_sws(
         hg_pkg_hash=hg_pkg_hash,
         hg_maps_hash=hg_maps_hash,
         changenote=changenote,
+        build_id=build_id,
     )
 
     return map_vdf_file
@@ -140,8 +146,8 @@ class BuildState(StrEnum):
     SYNCING = "Syncing repos."
     COMPILING = "Compiling scripts."
     BREWING = "Brewing content."
-    # SWS_PREPARING_UPLOAD = "Preparing Steam Workshop uploads."
-    # SWS_UPLOADING = "Uploading to Steam Workshop."
+    SWS_PREPARING_UPLOAD = "Preparing Steam Workshop uploads."
+    SWS_UPLOADING = "Uploading to Steam Workshop."
     FINISHED = "Finished."
 
 
@@ -638,12 +644,12 @@ async def check_for_updates(
             "WW2GameInfo.DummyObject",
         )
 
-        # build_state.state = BuildState.SWS_PREPARING_UPLOAD
-        # await send_build_state_update(
-        #     url=discord_config.builds_webhook_url,
-        #     build_id=build_id,
-        #     build_state=build_state,
-        # )
+        build_state.state = BuildState.SWS_PREPARING_UPLOAD
+        await send_build_state_update(
+            url=discord_config.builds_webhook_url,
+            build_id=build_id,
+            build_state=build_state,
+        )
 
         changenote = fr"""
 Build ID: {context.message.task_id}.
@@ -696,6 +702,7 @@ Mercurial maps commit: {hg_maps_hash}.
             hg_pkg_hash=hg_pkgs_hash,
             hg_maps_hash=hg_maps_hash,
             changenote=changenote,
+            build_id=context.message.task_id,
         )
 
         ww2_sws_dir_size = dir_size(ww2_content_folder)
@@ -734,24 +741,20 @@ Mercurial maps commit: {hg_maps_hash}.
             ex_string = "\n".join(map_exs)
             raise RuntimeError("failed to copy map files to SWS content directories: {}", ex_string)
 
+        common_map_staging_dir = _repo_dir / "workshop/generated/sws_map_staging/"
+        logger.info("commong map staging dir: {}", common_map_staging_dir)
         fs: list[Future[Path]] = []
         with ThreadPoolExecutor() as executor:
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
             template_vdf = _repo_dir / "workshop/BOBetaMapTemplate.vdf"
             for map_name, map_content_folder in map_sws_content_folders.items():
-                staging_dir = _repo_dir / "workshop/generated/sws_map_staging/" / map_name
+                staging_dir = common_map_staging_dir / map_name
                 staging_dir.mkdir(parents=True, exist_ok=True)
 
                 try:
                     publishedfileid = rs2_config.bo_dev_beta_map_ids[map_name]
                 except KeyError:
                     logger.warning("no SWS ID for map '{}', skipping", map_name)
-                    continue
-
-                try:
-                    content_folder = map_content_folder
-                except KeyError:
-                    logger.error("failed to determine contentfolder for map '{}'", map_name)
                     continue
 
                 fs.append(executor.submit(
@@ -765,7 +768,8 @@ Mercurial maps commit: {hg_maps_hash}.
                     hg_pkg_hash=hg_pkgs_hash,
                     hg_maps_hash=hg_maps_hash,
                     changenote=changenote,
-                    content_folder=content_folder,
+                    content_folder=map_content_folder,
+                    build_id=context.message.task_id,
                 ))
 
         map_vdf_configs: list[Path] = []
@@ -788,50 +792,91 @@ Mercurial maps commit: {hg_maps_hash}.
         #   a notification when such a map is found.
 
         logger.info("building {} workshop items", len(map_vdf_configs) + 1)
-        # build_state.state = BuildState.SWS_UPLOADING
-        # await send_build_state_update(
-        #     url=discord_config.builds_webhook_url,
-        #     build_id=build_id,
-        #     build_state=build_state,
-        #     fields=[
-        #         ("Total items to upload", str(len(map_vdf_configs) + 1), False),
-        #     ],
-        # )
+        build_state.state = BuildState.SWS_UPLOADING
+        await send_build_state_update(
+            url=discord_config.builds_webhook_url,
+            build_id=build_id,
+            build_state=build_state,
+            fields=[
+                ("Total items to upload", str(len(map_vdf_configs) + 1), False),
+            ],
+        )
 
-        # TODO: start steamcmd build! Main mod first, then maps!
+        logger.info("building main WW2 SWS item")
+        ww2_sws_manifest = make_sws_manifest(
+            out_file=ww2u_staging_dir / f"ww2_sws_manifest_{context.message.task_id}.json",
+            content_folder=ww2_content_folder,
+            content_folder_parent=ww2u_staging_dir,
+            item_id=rs2_config.bo_dev_beta_workshop_id,
+            git_hash=git_hash,
+            hg_packages_hash=hg_pkgs_hash,
+            hg_maps_hash=hg_maps_hash,
+            build_id=context.message.task_id,
+            build_time_utc=utcnow(),
+        )
+        logger.info("WW2 main SWS item manifest: {}", ww2_sws_manifest)
+        code = await get_steamguard_code(
+            steamcmd_config.steamguard_cli_path,
+            steamcmd_config.steamguard_passkey,
+        )
+        await workshop_build_item(
+            steamcmd_config.exe_path,
+            username=steamcmd_config.username,
+            password=steamcmd_config.password,
+            item_config_path=ww2_sws_vdf_config_path,
+            steamguard_code=code,
+        )
 
-        if False:
-            logger.info("building main WW2 SWS item")
-            code = await get_steamguard_code(
-                steamcmd_config.steamguard_cli_path,
-                steamcmd_config.steamguard_passkey,
-            )
-            await workshop_build_item(
-                steamcmd_config.exe_path,
-                username=steamcmd_config.username,
-                password=steamcmd_config.password,
-                item_config_path=ww2_sws_vdf_config_path,
-                steamguard_code=code,
-            )
+        logger.info("building {} WW2 SWS map items", len(map_vdf_configs))
+        wrks = int(math.ceil((os.cpu_count() or 8) / 2))
+        map_manifest_futures: dict[str, Future[WorkshopManifest]] = {}
+        md5_executor = ThreadPoolExecutor(max_workers=wrks)
+        with ThreadPoolExecutor(max_workers=wrks) as main_executor:
+            for map_name, map_content_folder in map_sws_content_folders.items():
+                staging_dir = common_map_staging_dir / map_name
+                map_manifest_futures[map_name] = main_executor.submit(
+                    make_sws_manifest,
+                    out_file=staging_dir / f"{map_name}_sws_manifest_{context.message.task_id}.json",
+                    content_folder=map_content_folder,
+                    content_folder_parent=common_map_staging_dir,
+                    item_id=rs2_config.bo_dev_beta_map_ids[map_name],
+                    git_hash=git_hash,
+                    hg_packages_hash=hg_pkgs_hash,
+                    hg_maps_hash=hg_maps_hash,
+                    build_id=context.message.task_id,
+                    build_time_utc=utcnow(),
+                    executor=md5_executor,
+                )
 
-            logger.info("building {} WW2 SWS map items", len(map_vdf_configs))
-            code = await get_steamguard_code(
-                steamcmd_config.steamguard_cli_path,
-                steamcmd_config.steamguard_passkey,
-            )
-            await workshop_build_item_many(
-                steamcmd_config.exe_path,
-                username=steamcmd_config.username,
-                password=steamcmd_config.password,
-                item_config_paths=map_vdf_configs,
-                steamguard_code=code,
-            )
+        # TODO: do we need a timeout here?
+        logger.info("waiting for MD5 calculation ThreadPoolExecutor to finish")
+        md5_executor.shutdown(wait=True)
 
-        # TODO: IMPORTANT: generate some kind of manifest of uploaded workshop content!
-        #   - Log all files that were in each SWS item's content folder.
-        #   - Log their MD5 hashes.
-        #   - Log all repo hashes.
-        #   - Log build ID!
+        map_future_errors = []
+        for map_name, map_future in map_manifest_futures.items():
+            try:
+                manifest = map_future.result()
+                logger.info("{} SWS manifest: {}", map_name, manifest)
+            except Exception as e:
+                logger.error("future {} failed with error: {}: {}",
+                             map_future, type(e).__name__, e)
+                map_future_errors.append(str(e))
+
+        if map_future_errors:
+            map_future_errors_str = "\n".join(map_future_errors)
+            raise RuntimeError(f"failed to create SWS manifests:\n{map_future_errors_str}")
+
+        code = await get_steamguard_code(
+            steamcmd_config.steamguard_cli_path,
+            steamcmd_config.steamguard_passkey,
+        )
+        await workshop_build_item_many(
+            steamcmd_config.exe_path,
+            username=steamcmd_config.username,
+            password=steamcmd_config.password,
+            item_config_paths=map_vdf_configs,
+            steamguard_code=code,
+        )
 
         logger.info("task {} done", context.message)
 
@@ -846,6 +891,7 @@ Mercurial maps commit: {hg_maps_hash}.
             ("UScript compilation errors", str(len(make_errors)), False),
         ]
 
+        build_state.state = BuildState.FINISHED
         stop_time = utcnow()
         delta = stop_time - start_time
         success_desc = f"Build state:\n{build_state.embed_str}\nTotal duration: {delta}."
