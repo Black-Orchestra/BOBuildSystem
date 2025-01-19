@@ -542,6 +542,7 @@ async def check_for_updates(
             [m.stem.lower() for m in repo_maps]
             + [x.lower() for x in chain.from_iterable(sublevels)]
         )
+        logger.info("allowed .roe stems: {}", allowed_roe_stems)
         all_unpub_roes = unpub_maps_dir.rglob("*.roe")
         for unpub_roe in all_unpub_roes:
             if unpub_roe.stem.lower() not in allowed_roe_stems:
@@ -573,8 +574,8 @@ async def check_for_updates(
             unpub_pkgs_dir.rglob("*.upk")
         ]
 
-        logger.info(".roe files to brew: {}", len(roe_content))
-        logger.info(".upk files to brew: {}", len(upk_content))
+        logger.info(".roe files to brew (before cleanup): {}", len(roe_content))
+        logger.info(".upk files to brew (before cleanup): {}", len(upk_content))
 
         total_content_to_brew = len(["WW2"]) + len(roe_content) + len(upk_content)
         # TODO: if we list all packages here, we exceed the command line
@@ -584,17 +585,23 @@ async def check_for_updates(
         content_to_brew = ["WW2"] + roe_content
         logger.info("total number of content to brew: {}", total_content_to_brew)
 
+        total_upks_to_brew = len(upk_content)
         pub_pkg: Path
+        upk_content_lower = [upk.lower() for upk in upk_content]
         for pub_pkg in pub_pkgs_dir.rglob("*.upk"):
-            if pub_pkg.name not in upk_content:
-                logger.info("removing '{}' from Published content", pub_pkg)
+            if pub_pkg.name.lower() not in upk_content_lower:
+                logger.info("removing '{}' from Published content (not found in Unpublished)", pub_pkg)
                 pub_pkg.unlink(missing_ok=True)
+                total_upks_to_brew -= 1
 
+        total_roes_to_brew = len(roe_content)
         pub_map: Path
+        roe_content_lower = [roe.lower() for roe in roe_content]
         for pub_map in pub_maps_dir.rglob("*.roe"):
-            if pub_map.stem not in roe_content:
-                logger.info("removing '{}' from Published content", pub_map)
+            if pub_map.stem.lower() not in roe_content_lower:
+                logger.info("removing '{}' from Published content (not found in Unpublished)", pub_map)
                 pub_map.unlink(missing_ok=True)
+                total_roes_to_brew -= 1
 
         build_state.state = BuildState.BREWING
         await send_build_state_update(
@@ -602,8 +609,8 @@ async def check_for_updates(
             build_id=build_id,
             build_state=build_state,
             fields=[
-                ("Total .upk files to brew", str(len(upk_content)), False),
-                ("Total .roe files to brew", str(len(roe_content)), False),
+                ("Total .upk files to brew", str(total_upks_to_brew), False),
+                ("Total .roe files to brew", str(total_roes_to_brew), False),
             ]
         )
         brew_warnings, brew_errors = await bobuild.run.vneditor_brew(
