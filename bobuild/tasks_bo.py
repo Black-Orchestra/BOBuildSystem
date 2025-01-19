@@ -806,7 +806,7 @@ Mercurial maps commit: {hg_maps_hash}.
         ww2_sws_manifest = make_sws_manifest(
             out_file=ww2u_staging_dir / f"ww2_sws_manifest_{context.message.task_id}.json",
             content_folder=ww2_content_folder,
-            content_folder_parent=ww2u_staging_dir,
+            content_folder_parent=ww2_content_folder,
             item_id=rs2_config.bo_dev_beta_workshop_id,
             git_hash=git_hash,
             hg_packages_hash=hg_pkgs_hash,
@@ -838,7 +838,7 @@ Mercurial maps commit: {hg_maps_hash}.
                     make_sws_manifest,
                     out_file=staging_dir / f"{map_name}_sws_manifest_{context.message.task_id}.json",
                     content_folder=map_content_folder,
-                    content_folder_parent=common_map_staging_dir,
+                    content_folder_parent=map_content_folder,
                     item_id=rs2_config.bo_dev_beta_map_ids[map_name],
                     git_hash=git_hash,
                     hg_packages_hash=hg_pkgs_hash,

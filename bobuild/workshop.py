@@ -389,6 +389,9 @@ def make_sws_manifest(
         build_time_utc: datetime.datetime,
         executor: ThreadPoolExecutor | None = None,
 ) -> WorkshopManifest:
+    # TODO: is content_folder_parent useless?
+    #   It's always the same as content_folder?
+
     file_to_md5: dict[Path, str] = {}
 
     if executor:
