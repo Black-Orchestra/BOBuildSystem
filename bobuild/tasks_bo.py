@@ -271,6 +271,8 @@ async def check_for_updates(
     make_warnings: list[str] = []
     make_errors: list[str] = []
 
+    start_time = utcnow()
+
     try:
         logger.info("checking for updates")
 
@@ -394,7 +396,6 @@ async def check_for_updates(
                 return
 
         started_updating = True
-        start_time = utcnow()
         build_state = TaskBuildState(BuildState.SYNCING)
 
         ww2_inis = git_config.repo_path.rglob("*.ini")
@@ -511,6 +512,7 @@ async def check_for_updates(
             for m, m_sublevels in zip(repo_maps, sublevels)
         }
 
+        # TODO: this could be sped up with ThreadPoolExecutor.
         for m in repo_maps:
             mn = m.stem
             if mn in map_to_unpub_dir:
@@ -818,6 +820,10 @@ Mercurial maps commit: {hg_maps_hash}.
         logger.error("error running task: {}: {}: {}",
                      context.message, type(e).__name__, e)
 
+        stop_time = utcnow()
+        delta = stop_time - start_time
+        logger.info("total time spent: {}", delta)
+
         # Don't report failures for tasks that had no actual work to do!
         if started_updating:
             failure_fields = [
@@ -834,7 +840,8 @@ Mercurial maps commit: {hg_maps_hash}.
                 "```python-repl\n"
                 f"Error: {type(e).__name__}\n"
                 f"{traceback.format_exc()}\n"
-                "```"
+                "```\n"
+                f"Total duration: {delta}."
             )
 
             await send_webhook(
