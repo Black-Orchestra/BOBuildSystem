@@ -394,8 +394,11 @@ async def run_vneditor(
     if errs:
         count = 100
         errs_str = "\n".join(handler.errors[:count])
-        raise RuntimeError("VNEditor.exe failed: Errors ({} total, only {} shown):\n{}",
-                           len(handler.errors), 100, errs_str)
+        raise RuntimeError(
+            "VNEditor.exe failed: "
+            f"Errors ({len(handler.errors)} total, "
+            f"only {count} shown):\n{errs_str}"
+        )
 
     return handler.warnings, handler.errors
 
