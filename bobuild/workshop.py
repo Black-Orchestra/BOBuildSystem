@@ -484,8 +484,15 @@ async def main() -> None:
     args = ap.parse_args()
     action = args.action
     logger.info("performing action: {}", action)
+
+    maps_dir = args.maps_dir
+    if maps_dir:
+        maps_dir_path = Path(maps_dir).resolve()
+    else:
+        maps_dir_path = None
+
     await action_choices[args.action](
-        maps_dir=args.maps_dir,
+        maps_dir=maps_dir_path,
     )
     logger.info("exiting")
 
