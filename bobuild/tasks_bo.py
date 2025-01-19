@@ -8,9 +8,12 @@ from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
+from itertools import chain
 from pathlib import Path
 from typing import Annotated
+from typing import Awaitable
 from typing import Iterator
+from typing import TypeVar
 
 import discord
 from redis.asyncio import Redis
@@ -198,6 +201,27 @@ def dir_size(path: Path) -> int:
     )
 
 
+T = TypeVar("T")
+
+
+async def gather(*tasks: asyncio.Future[T] | Awaitable[T]) -> list[T]:
+    try:
+        return await asyncio.gather(*tasks)
+    except Exception as e:
+        logger.exception("task failure: {}, cancelling all remaining", e)
+        raise
+    finally:
+        for task in tasks:
+            # TODO: is this the proper check?
+            if hasattr(task, "cancel"):
+                task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except (Exception, asyncio.CancelledError):
+                pass
+
+
 # TODO: add custom logger that logs task IDs as extra!
 
 _bo_build_lock_name = "bobuild.tasks_bo.check_for_updates__LOCK"
@@ -302,7 +326,7 @@ async def check_for_updates(
 
         if clone_tasks:
             logger.info("running {} clone tasks", len(clone_tasks))
-            await asyncio.gather(*clone_tasks)
+            await gather(*clone_tasks)
 
         hg_pkgs_incoming_task = bobuild.hg.incoming(hg_config.pkg_repo_path)
         hg_maps_incoming_task = bobuild.hg.incoming(hg_config.maps_repo_path)
@@ -312,7 +336,7 @@ async def check_for_updates(
         # TODO: bobuild.hg.has_missing implementation!
 
         logger.info("running all repo update check tasks")
-        hg_pkgs_inc, hg_maps_inc, git_has_update = await asyncio.gather(
+        hg_pkgs_inc, hg_maps_inc, git_has_update = await gather(
             hg_pkgs_incoming_task,
             hg_maps_incoming_task,
             git_has_update_task,
@@ -357,7 +381,7 @@ async def check_for_updates(
 
         if hash_diffs_tasks:
             logger.info("running {} hash diff tasks", len(hash_diffs_tasks))
-            hg_pkg_hashes, hg_maps_hashes, git_hashes = await asyncio.gather(*hash_diffs_tasks)
+            hg_pkg_hashes, hg_maps_hashes, git_hashes = await gather(*hash_diffs_tasks)
             log_hash_diffs(hg_pkg_hashes, "hg packages repo")
             log_hash_diffs(hg_maps_hashes, "hg maps repo")
             log_hash_diffs(git_hashes, "git repo")
@@ -366,7 +390,7 @@ async def check_for_updates(
 
         if sync_tasks:
             logger.info("running {} repo sync tasks", len(sync_tasks))
-            await asyncio.gather(*sync_tasks)
+            await gather(*sync_tasks)
         else:
             logger.info("no repo sync tasks, all up to date")
             if any((cloned_git, cloned_hg_pkgs, cloned_hg_maps)):
@@ -464,11 +488,11 @@ async def check_for_updates(
         # Package names in UE are globally unique, only need to check file names.
         hg_source_upks_names = [file.name for file in find_files(hg_config.pkg_repo_path, "*.upk")]
         hg_source_roes_names = [file.name for file in find_files(hg_config.maps_repo_path, "*.roe")]
-        for unpub_pkg in find_files(unpub_pkgs_dir, "*.upk"):
+        for unpub_pkg in unpub_pkgs_dir.rglob("*.upk"):
             if unpub_pkg.name not in hg_source_upks_names:
                 logger.info("removing package '{}' from Unpublished", unpub_pkg)
                 unpub_pkg.unlink(missing_ok=True)
-        for unpub_roe in find_files(unpub_maps_dir, "*.roe"):
+        for unpub_roe in unpub_maps_dir.rglob("*.roe"):
             if unpub_roe.name not in hg_source_roes_names:
                 logger.info("removing map '{}' from Unpublished", unpub_roe)
                 unpub_roe.unlink(missing_ok=True)
@@ -481,12 +505,23 @@ async def check_for_updates(
             "RRTE-Beach_Invasion_Sim": "BeachInvasionSim",
         }
 
-        # TODO: use executor here? At least do find_sublevels in executor!
         # TODO: we should also delete levels from Unpublished here that do not
         #   start with DRTE or RRTE! Some of the WF levels seem to crash BrewContent
         #   commandlet!
         map_unpub_dirs: dict[str, Path] = {}
-        for m in iter_maps(hg_config.maps_repo_path):
+        repo_maps = list(iter_maps(hg_config.maps_repo_path))
+
+        sublevel_tasks = []
+        for m in repo_maps:
+            sublevel_tasks.append(find_sublevels(m))
+        logger.info("running {} find_sublevels tasks", len(sublevel_tasks))
+        sublevels: list[list[str]] = await gather(*sublevel_tasks)
+        map_to_sublevels: dict[Path, list[str]] = {
+            m: m_sublevels
+            for m, m_sublevels in zip(repo_maps, sublevels)
+        }
+
+        for m in repo_maps:
             mn = m.stem
             if mn in map_to_unpub_dir:
                 map_unpub_dir = unpub_maps_dir / map_to_unpub_dir[mn]
@@ -496,8 +531,8 @@ async def check_for_updates(
 
             map_unpub_dirs[mn] = map_unpub_dir
 
-            sublevels = await find_sublevels(m)
-            logger.info("map '{}' sublevels: {}", mn, sublevels)
+            map_sublevels = map_to_sublevels[m]
+            logger.info("map '{}' sublevels: {}", mn, map_sublevels)
 
             logger.info("map '{}': Unpublished dir: '{}'", mn, map_unpub_dir)
             map_unpub_dir.mkdir(parents=True, exist_ok=True)
@@ -505,12 +540,23 @@ async def check_for_updates(
                 m.parent,
                 map_unpub_dir,
                 src_glob="*.roe",
-                src_stems=sublevels + [mn],
+                src_stems=map_sublevels + [mn],
                 check_md5=True,
             )
 
+        # TODO: doing a bit of duplicated work here, refactor later?
+        #   First we copied everything, then we delete unneeded after.
+        #   Refactor to only copy needed, so no need to delete later?
+        # DRTEs, RRTEs and their sublevels.
+        allowed_roe_stems = set([m.stem for m in repo_maps] + [x for x in chain(sublevels)])
+        all_unpub_roes = unpub_maps_dir.rglob("*.roe")
+        for unpub_roe in all_unpub_roes:
+            if unpub_roe.stem not in allowed_roe_stems:
+                logger.info("removing map '{}' from Unpublished", unpub_roe)
+                unpub_roe.unlink(missing_ok=True)
+
         ww2u = rs2_config.unpublished_dir / "CookedPC/WW2.u"
-        logger.info("removing '{}'", ww2u)
+        logger.info("removing '{}' to force script compilation", ww2u)
         ww2u.unlink(missing_ok=True)
 
         build_state.state = BuildState.COMPILING
@@ -587,22 +633,16 @@ Mercurial packages commit: {hg_pkgs_hash}.
 Mercurial maps commit: {hg_maps_hash}.
         """
 
-        # TODO: for all SWS items, we need to copy the necessary items from
-        #   Published to isolated sub-directories:
-        # temp_dir_name/CookedPC/Packages/WW2/*.upk
-        # temp_dir_name/CookedPC/Maps/WW2/FRONT_NAME/MAP_NAME/*.roe
-
         sws_content_base_dir = rs2_config.rs2_documents_dir / "sws_upload_temp/"
 
         ww2u_staging_dir = _repo_dir / "workshop/generated/ww2u_staging/"
         logger.info("preparing main SWS item in '{}'", ww2u_staging_dir)
         ww2u_staging_dir.mkdir(parents=True, exist_ok=True)
         ww2_content_folder = get_temp_sws_content_dir(sws_content_base_dir, "WW2")
-        # TODO: actually put the files in the content folder!
 
-        # TODO: double-check this later!
         ww2u_pub = rs2_config.published_dir / "CookedPC/WW2.u"
         ww2u_pub_dst = ww2_content_folder / "CookedPC/WW2.u"
+        ww2u_pub_dst.parent.mkdir(parents=True, exist_ok=True)
         logger.info("copying Published WW2.u to SWS content dir: '{}' -> '{}'",
                     ww2u_pub, ww2u_pub_dst)
         shutil.copyfile(ww2u_pub, ww2u_pub_dst)
@@ -618,8 +658,10 @@ Mercurial maps commit: {hg_maps_hash}.
 
         # TODO: this does not work correctly if we ever add nested package
         #   directories such as Packages/WW2/X, Packages/WW2/Y, etc.
+        sws_ww2u_pkgs_dir = ww2_content_folder / "CookedPC/Packages/WW2"
+        sws_ww2u_pkgs_dir.mkdir(parents=True, exist_ok=True)
         for pub_pkg in pub_pkgs_dir.rglob("*.upk"):
-            dst = ww2_content_folder / "CookedPC/Packages/WW2" / pub_pkg.name
+            dst = sws_ww2u_pkgs_dir / pub_pkg.name
             logger.info("copying Published UPK to SWS content dir: '{}' -> '{}'", pub_pkg, dst)
             shutil.copyfile(pub_pkg, dst)
 
@@ -635,8 +677,8 @@ Mercurial maps commit: {hg_maps_hash}.
             changenote=changenote,
         )
 
-        # TODO: report this value!
-        # ww2_sws_dir_size = dir_size(ww2_content_folder)
+        ww2_sws_dir_size = dir_size(ww2_content_folder)
+        logger.info("WW2 main SWS item directory size: {}", ww2_sws_dir_size)
 
         pub_sws_maps = set(iter_maps(pub_maps_dir))
         map_sws_content_folders = {
@@ -792,7 +834,7 @@ Mercurial maps commit: {hg_maps_hash}.
                 embed_fields=failure_fields,
             )
 
-            # TODO: handle this:
+            logger.info("log_line_buffer={}, len=", log_line_buffer, len(log_line_buffer))
             if log_line_buffer:
                 max_len = 1800
                 x = 0
@@ -800,8 +842,8 @@ Mercurial maps commit: {hg_maps_hash}.
                 while (log_line := log_line_buffer.popleft()) and (x < max_len):
                     x += len(log_line)
                     if x + len(log_line) > max_len:
-                        delta = max_len - x
-                        log_line = log_line[:delta]
+                        len_diff = max_len - x
+                        log_line = log_line[:len_diff]
                     lines.append(log_line)
 
                 extra_desc = "\n".join(lines)
