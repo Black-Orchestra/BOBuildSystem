@@ -29,9 +29,13 @@ from bobuild.config import DiscordConfig
 from bobuild.config import GitConfig
 from bobuild.config import MercurialConfig
 from bobuild.config import RS2Config
+from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
 from bobuild.run import find_sublevels
 from bobuild.run import log_line_buffer
+from bobuild.steamcmd import get_steamguard_code
+from bobuild.steamcmd import workshop_build_item
+from bobuild.steamcmd import workshop_build_item_many
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
@@ -59,6 +63,10 @@ def rs2_config_dep(_: Annotated[Context, TaskiqDepends()]) -> RS2Config:
 
 def discord_config_dep(_: Annotated[Context, TaskiqDepends()]) -> DiscordConfig:
     return DiscordConfig()
+
+
+def steamcmd_config_dep(_: Annotated[Context, TaskiqDepends()]) -> SteamCmdConfig:
+    return SteamCmdConfig()
 
 
 async def dummy_hash_task() -> tuple[str, str]:
@@ -240,6 +248,7 @@ async def check_for_updates(
         git_config: GitConfig = TaskiqDepends(git_config_dep),
         rs2_config: RS2Config = TaskiqDepends(rs2_config_dep),
         discord_config: DiscordConfig = TaskiqDepends(discord_config_dep),
+        steamcmd_config: SteamCmdConfig = TaskiqDepends(steamcmd_config_dep),
         redis: Redis = TaskiqDepends(redis_dep),
 ) -> None:
     """NOTE: custom middleware and scheduler should ensure this task
@@ -637,6 +646,7 @@ async def check_for_updates(
         # )
 
         changenote = fr"""
+Build ID: {context.message.task_id}.
 Git commit: {git_hash}.
 Mercurial packages commit: {hg_pkgs_hash}.
 Mercurial maps commit: {hg_maps_hash}.
@@ -675,8 +685,9 @@ Mercurial maps commit: {hg_maps_hash}.
             shutil.copyfile(pub_pkg, dst)
 
         logger.info("writing main SWS item .vdf config")
+        ww2_sws_vdf_config_path = ww2u_staging_dir / "ww2.vdf"
         write_sws_config(
-            out_file=ww2u_staging_dir / "ww2.vdf",
+            out_file=ww2_sws_vdf_config_path,
             template_file=_repo_dir / "workshop/BOBetaTemplate.vdf",
             content_folder=ww2_content_folder,
             preview_file=_repo_dir / "workshop/bo_beta_workshop_main.png",
@@ -788,6 +799,39 @@ Mercurial maps commit: {hg_maps_hash}.
 
         # TODO: start steamcmd build! Main mod first, then maps!
 
+        if False:
+            logger.info("building main WW2 SWS item")
+            code = await get_steamguard_code(
+                steamcmd_config.steamguard_cli_path,
+                steamcmd_config.steamguard_passkey,
+            )
+            await workshop_build_item(
+                steamcmd_config.exe_path,
+                username=steamcmd_config.username,
+                password=steamcmd_config.password,
+                item_config_path=ww2_sws_vdf_config_path,
+                steamguard_code=code,
+            )
+
+            logger.info("building {} WW2 SWS map items", len(map_vdf_configs))
+            code = await get_steamguard_code(
+                steamcmd_config.steamguard_cli_path,
+                steamcmd_config.steamguard_passkey,
+            )
+            await workshop_build_item_many(
+                steamcmd_config.exe_path,
+                username=steamcmd_config.username,
+                password=steamcmd_config.password,
+                item_config_paths=map_vdf_configs,
+                steamguard_code=code,
+            )
+
+        # TODO: IMPORTANT: generate some kind of manifest of uploaded workshop content!
+        #   - Log all files that were in each SWS item's content folder.
+        #   - Log their MD5 hashes.
+        #   - Log all repo hashes.
+        #   - Log build ID!
+
         logger.info("task {} done", context.message)
 
         # TODO: move duplicated stuff into dedicated webhook funcs?
@@ -814,7 +858,6 @@ Mercurial maps commit: {hg_maps_hash}.
             embed_fields=success_fields,
         )
 
-        # TODO: generate some kind of manifest of uploaded workshop content?
 
     except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.error("error running task: {}: {}: {}",

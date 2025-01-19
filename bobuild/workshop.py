@@ -189,7 +189,10 @@ def write_sws_config(
         hg_maps_hash: str = "null",
         changenote: str = "",
         published_file_id: int | None = None,
+        build_id: str | None = None,
 ):
+    build_id = build_id or "null"
+
     template = vdf.loads(template_file.read_text())
     if published_file_id is not None:
         template["workshopitem"]["publishedfileid"] = published_file_id
@@ -199,6 +202,7 @@ def write_sws_config(
         _git_hash=git_hash,
         _hg_pkg_hash=hg_pkg_hash,
         _hg_maps_hash=hg_maps_hash,
+        _build_id=build_id
     )
     template["workshopitem"]["changenote"] = changenote
     template["workshopitem"]["description"] = desc
@@ -219,7 +223,10 @@ def write_map_sws_config(
         hg_pkg_hash: str = "null",
         hg_maps_hash: str = "null",
         changenote: str = "",
+        build_id: str | None = None,
 ):
+    build_id = build_id or "null"
+
     template = vdf.loads(template_file.read_text())
     template["workshopitem"]["publishedfileid"] = publishedfileid
     template["workshopitem"]["contentfolder"] = str(content_folder.resolve())
@@ -231,6 +238,7 @@ def write_map_sws_config(
         _git_hash=git_hash,
         _hg_pkg_hash=hg_pkg_hash,
         _hg_maps_hash=hg_maps_hash,
+        _build_id=build_id,
     )
     template["workshopitem"]["changenote"] = changenote
     template["workshopitem"]["description"] = desc
