@@ -14,6 +14,7 @@ from PIL import ImageDraw
 from PIL import ImageFilter
 from PIL import ImageFont
 
+from bobuild.config import RS2Config
 from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
 from bobuild.steamcmd import get_steamguard_code
@@ -162,7 +163,15 @@ def draw_map_preview_file(
     img.save(output_file)
 
 
-async def test() -> None:
+async def test(
+        *_,
+        maps_dir: Path | None = None,
+        **__,
+) -> None:
+    if maps_dir is None:
+        raise RuntimeError(
+            f"invalid maps_dir: {maps_dir}, required for action 'test'")
+
     draw_map_preview_file(
         map_name="DRTE-ElAlamein@@@@@@@@@@@@@@@@@@@@@@",
         template_file=_repo_dir / "workshop/bo_beta_workshop_map.png",
@@ -171,10 +180,8 @@ async def test() -> None:
         font_color=_bo_red,
     )
 
-    # TODO: take this as an argument?
-    test_dir = Path(r"P:\BO_Repos\BO_Maps")
-    if test_dir.exists():
-        map_names = find_map_names(test_dir)
+    if maps_dir.exists():
+        map_names = find_map_names(maps_dir)
         with ThreadPoolExecutor() as executor:
             for map_name in map_names:
                 executor.submit(
@@ -187,11 +194,17 @@ async def test() -> None:
                 )
 
 
-async def list_maps() -> None:
-    # TODO: take this as an argument?
-    test_dir = Path(r"P:\BO_Repos\BO_Maps")
-    if test_dir.exists():
-        map_names = sorted(find_map_names(test_dir))
+async def list_maps(
+        *_,
+        maps_dir: Path | None = None,
+        **__,
+) -> None:
+    if maps_dir is None:
+        raise RuntimeError(
+            f"invalid maps_dir: {maps_dir}, required for action 'list_maps'")
+
+    if maps_dir.exists():
+        map_names = sorted(find_map_names(maps_dir))
         for m in map_names:
             print(m)
 
@@ -309,7 +322,9 @@ Mercurial maps commit: null.
 
 
 async def first_time_upload_all_maps(
-        # maps_dir: Path,
+        *_,
+        maps_dir: Path | None = None,
+        **__,
 ) -> None:
     """WARNING: this will create new workshop items for all
     BO dev maps and list their workshop IDs. The SWS items are
@@ -317,19 +332,29 @@ async def first_time_upload_all_maps(
 
     Run this as a first-time setup action to create the SWS items
     for later usage in automation.
-
-    TODO: add option to skip existing items?
     """
-    cfg = SteamCmdConfig()
+    if maps_dir is None:
+        raise RuntimeError(
+            f"invalid maps_dir: {maps_dir}, "
+            "required for action 'first_time_upload_all_maps'")
 
-    # TODO: take this as an argument!!!
-    maps_dir = Path(r"P:\BO_Repos\BO_Maps")
+    cfg = SteamCmdConfig()
+    rs2_cfg = RS2Config()
 
     logger.info("first-time uploading all maps")
 
     map_names = sorted(find_map_names(maps_dir))
-    map_cfg_paths: list[Path] = []
+    to_skip: set[str] = set()
+    for map_name in map_names:
+        if (map_id := rs2_cfg.bo_dev_beta_map_ids.get(map_name, -1)) != -1:
+            logger.warning(
+                "skipping map '{}' with existing SWS ID: {}",
+                map_name, map_id)
+            to_skip.add(map_name)
+    for ts in to_skip:
+        map_names.remove(ts)
 
+    map_cfg_paths: list[Path] = []
     with ThreadPoolExecutor() as executor:
         futs: list[Future[Path]] = []
         for map_name in map_names:
@@ -450,11 +475,18 @@ async def main() -> None:
         choices=action_choices.keys(),
         help="action to perform",
     )
+    ap.add_argument(
+        "--maps-dir",
+        help="path to a directory for actions that take map directory as an argument",
+        optional=True,
+    )
 
     args = ap.parse_args()
     action = args.action
     logger.info("performing action: {}", action)
-    await action_choices[args.action]()
+    await action_choices[args.action](
+        maps_dir=args.maps_dir,
+    )
     logger.info("exiting")
 
 
