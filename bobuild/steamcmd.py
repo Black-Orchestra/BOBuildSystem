@@ -111,8 +111,8 @@ async def run_cmd(
             cwd=str(steamcmd_path.parent.resolve()),
         )
 
-        all_out = []
-        all_err = []
+        all_out: list[str] = []
+        all_err: list[str] = []
 
         if not proc.stdout:
             raise RuntimeError(f"process has no stdout: {proc}")
