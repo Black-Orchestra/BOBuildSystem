@@ -452,7 +452,7 @@ def make_sws_manifest(
     )
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
-    with out_file.open("rb") as f:
+    with out_file.open("wb") as f:
         logger.info("writing SWS manifest: '{}'", out_file)
         f.write(orjson.dumps(
             manifest,
