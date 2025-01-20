@@ -523,6 +523,8 @@ async def workshop_status(
         str(download_dir.resolve()),
         "+workshop_status",
         str(RS2_APPID),
+        "+logoff",
+        "+quit",
         raise_on_error=True,
         return_output=True,
         steamguard_code=code,
