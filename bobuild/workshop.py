@@ -41,7 +41,7 @@ class WorkshopManifest:
     hg_maps_hash: str
     build_id: str
     build_time_utc: datetime.datetime
-    file_to_md5: dict[Path, str]
+    file_to_md5: dict[str, str]
 
 
 def iter_maps(
@@ -417,14 +417,18 @@ def make_sws_manifest(
     # TODO: is content_folder_parent useless?
     #   It's always the same as content_folder?
 
-    file_to_md5: dict[Path, str] = {}
+    file_to_md5: dict[str, str] = {}
 
     if executor:
         md5_future: Future[dict[Path, str]] = executor.submit(
             calculate_file_md5_hashes,
             content_folder,
         )
-        file_to_md5 = md5_future.result()
+        file_to_md5 = {
+            str(file): md5
+            for file, md5 in md5_future.result().items()
+        }
+
     else:
         md5_futures: dict[Path, Future[str]] = {}
         with ThreadPoolExecutor() as executor:
@@ -434,12 +438,7 @@ def make_sws_manifest(
                     file,
                 )
         for file, md5_fut in md5_futures.items():
-            file_to_md5[file] = md5_fut.result()
-
-    file_to_md5 = {
-        file.relative_to(content_folder_parent): md5
-        for file, md5 in file_to_md5.items()
-    }
+            file_to_md5[str(file.relative_to(content_folder_parent))] = md5_fut.result()
 
     manifest = WorkshopManifest(
         workshop_item_id=item_id,
