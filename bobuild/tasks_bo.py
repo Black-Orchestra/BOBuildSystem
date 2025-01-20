@@ -42,6 +42,7 @@ from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
 from bobuild.workshop import WorkshopManifest
+from bobuild.workshop import dump_manifest
 from bobuild.workshop import iter_maps
 from bobuild.workshop import make_sws_manifest
 from bobuild.workshop import write_sws_config
@@ -651,8 +652,7 @@ async def check_for_updates(
             build_state=build_state,
         )
 
-        changenote = fr"""
-Build ID: {context.message.task_id}.
+        changenote = fr"""Build ID: {context.message.task_id}.
 Git commit: {git_hash}.
 Mercurial packages commit: {hg_pkgs_hash}.
 Mercurial maps commit: {hg_maps_hash}.
@@ -739,10 +739,11 @@ Mercurial maps commit: {hg_maps_hash}.
                 map_exs.append(str(ex))
         if map_exs:
             ex_string = "\n".join(map_exs)
-            raise RuntimeError("failed to copy map files to SWS content directories: {}", ex_string)
+            raise RuntimeError(
+                "failed to copy map files to SWS content directories: {}", ex_string)
 
         common_map_staging_dir = _repo_dir / "workshop/generated/sws_map_staging/"
-        logger.info("commong map staging dir: {}", common_map_staging_dir)
+        logger.info("common map staging dir: {}", common_map_staging_dir)
         fs: list[Future[Path]] = []
         with ThreadPoolExecutor() as executor:
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
@@ -803,8 +804,9 @@ Mercurial maps commit: {hg_maps_hash}.
         )
 
         logger.info("building main WW2 SWS item")
+        ww2_sws_manifest_out = ww2u_staging_dir / f"ww2_sws_manifest_{context.message.task_id}.json"
         ww2_sws_manifest = make_sws_manifest(
-            out_file=ww2u_staging_dir / f"ww2_sws_manifest_{context.message.task_id}.json",
+            out_file=ww2_sws_manifest_out,
             content_folder=ww2_content_folder,
             content_folder_parent=ww2_content_folder,
             item_id=rs2_config.bo_dev_beta_workshop_id,
@@ -814,6 +816,10 @@ Mercurial maps commit: {hg_maps_hash}.
             build_id=context.message.task_id,
             build_time_utc=utcnow(),
         )
+
+        # Include the manifest in the SWS content so the server can use them.
+        dump_manifest(ww2_sws_manifest, ww2_content_folder / ww2_sws_manifest_out.name)
+
         logger.info("WW2 main SWS item manifest: {}", ww2_sws_manifest)
         code = await get_steamguard_code(
             steamcmd_config.steamguard_cli_path,
@@ -831,12 +837,15 @@ Mercurial maps commit: {hg_maps_hash}.
         wrks = int(math.ceil((os.cpu_count() or 8) / 2))
         map_manifest_futures: dict[str, Future[WorkshopManifest]] = {}
         md5_executor = ThreadPoolExecutor(max_workers=wrks)
+        map_manifest_out_files: dict[str, Path] = {}
         with ThreadPoolExecutor(max_workers=wrks) as main_executor:
             for map_name, map_content_folder in map_sws_content_folders.items():
                 staging_dir = common_map_staging_dir / map_name
+                map_manifest_out_file = staging_dir / f"{map_name}_sws_manifest_{context.message.task_id}.json"
+                map_manifest_out_files[map_name] = map_manifest_out_file
                 map_manifest_futures[map_name] = main_executor.submit(
                     make_sws_manifest,
-                    out_file=staging_dir / f"{map_name}_sws_manifest_{context.message.task_id}.json",
+                    out_file=map_manifest_out_file,
                     content_folder=map_content_folder,
                     content_folder_parent=map_content_folder,
                     item_id=rs2_config.bo_dev_beta_map_ids[map_name],
@@ -848,7 +857,8 @@ Mercurial maps commit: {hg_maps_hash}.
                     executor=md5_executor,
                 )
 
-        # TODO: do we need a timeout here?
+        # If it doesn't finish instantly, we're fucked.
+        # TODO: think about how to handle potential error here.
         logger.info("waiting for MD5 calculation ThreadPoolExecutor to finish")
         md5_executor.shutdown(wait=True)
 
@@ -857,6 +867,9 @@ Mercurial maps commit: {hg_maps_hash}.
             try:
                 manifest = map_future.result()
                 logger.info("{} SWS manifest: {}", map_name, manifest)
+                map_manifest_in_sws_item_path = map_manifest_out_files[map_name].name
+                # Include the manifest in the SWS item content so the server can use it.
+                dump_manifest(manifest, map_sws_content_folders[map_name] / map_manifest_in_sws_item_path)
             except Exception as e:
                 logger.error("future {} failed with error: {}: {}",
                              map_future, type(e).__name__, e)
@@ -905,6 +918,10 @@ Mercurial maps commit: {hg_maps_hash}.
             embed_fields=success_fields,
         )
 
+        # TODO: report warnings for successful builds.
+        #   If there's a small number of warnings (less than 10),
+        #   show them all. Otherwise generate a list of most common
+        #   warnings and show top 10 warnings (and their counts).
 
     except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.error("error running task: {}: {}: {}",

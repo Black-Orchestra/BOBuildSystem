@@ -402,6 +402,16 @@ def calculate_file_md5_hashes(path: Path) -> dict[Path, str]:
     return results
 
 
+def dump_manifest(manifest: WorkshopManifest, out_file: Path):
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    with out_file.open("wb") as f:
+        logger.info("writing SWS manifest: '{}'", out_file)
+        f.write(orjson.dumps(
+            manifest,
+            option=orjson.OPT_INDENT_2 | orjson.OPT_APPEND_NEWLINE | orjson.OPT_SORT_KEYS
+        ))
+
+
 def make_sws_manifest(
         out_file: Path,
         content_folder: Path,
@@ -450,13 +460,7 @@ def make_sws_manifest(
         file_to_md5=file_to_md5,
     )
 
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    with out_file.open("wb") as f:
-        logger.info("writing SWS manifest: '{}'", out_file)
-        f.write(orjson.dumps(
-            manifest,
-            option=orjson.OPT_INDENT_2 | orjson.OPT_APPEND_NEWLINE | orjson.OPT_SORT_KEYS
-        ))
+    dump_manifest(manifest, out_file)
 
     return manifest
 
