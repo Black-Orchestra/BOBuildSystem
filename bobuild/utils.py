@@ -42,6 +42,9 @@ def get_var(name: str, default: T | object = _default) -> str | T:
     return os.environ.get(name, cast(T, default))
 
 
+# TODO: this should work on strings, not lists to make it
+#   general purpose. Redacting argument lists can be done within
+#   the functions that require redacting.
 def redact(x: str, args: list[str]) -> list[str]:
     return [
         arg
