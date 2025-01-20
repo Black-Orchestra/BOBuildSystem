@@ -318,6 +318,8 @@ async def workshop_build_item(
         item_config_path: Path,
         steamguard_code: str | None = None,
 ) -> None:
+    # TODO: this will return 0 from SteamCMD even if it errors
+    #   due to invalid path to item?
     await run_cmd(
         steamcmd_path,
         "+login", username, password,
@@ -423,6 +425,8 @@ async def get_steamguard_code(
         ))[1].strip()
         if code != _USED_CODE:
             break
+        logger.info("waiting for a fresh steamguard code")
+        await asyncio.sleep(3.0)
 
     if code is None:
         raise RuntimeError("unable to get steamguard code")
@@ -478,6 +482,33 @@ async def install_rs2_server(
         username="anonymous",
         password="",
         steamguard_code=None,
+    )
+
+
+async def install_workshop_item(
+        steamcmd_config: SteamCmdConfig,
+        force_install_dir: Path,
+        workshop_item_id: int,
+        username: str,
+        password: str,
+):
+    # TODO: test this!
+    code = await get_steamguard_code(
+        steamcmd_config.steamguard_cli_path,
+        steamcmd_config.steamguard_passkey,
+    )
+    await run_cmd(
+        steamcmd_config.exe_path,
+        "+login",
+        username,
+        password,
+        "+force_install_dir",
+        str(force_install_dir.resolve()),
+        "+workshop_download_item",
+        str(RS2_APPID),
+        str(workshop_item_id),
+        raise_on_error=True,
+        steamguard_code=code,
     )
 
 
