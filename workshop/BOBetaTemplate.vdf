@@ -6,8 +6,7 @@
 	"previewfile"	"{_previewfile}"
 	"visibility"	"1"
 	"title"	"Black Orchestra Beta [DEV]"
-	"description"	"
-Black Orchestra Beta automated developer build (build ID {_build_id}).
+	"description"	"Black Orchestra Beta automated developer build (build ID {_build_id}).
 Git commit: {_git_hash}.
 Mercurial packages commit: {_hg_pkg_hash}.
 Mercurial maps commit: {_hg_maps_hash}.
