@@ -511,6 +511,11 @@ async def ensure_roengine_config(rs2_config: RS2Config, *_, **__):
         suppressions.remove("DevLoad")
     if "DevShaders" in suppressions:
         suppressions.remove("DevShaders")
+    if "Localization" in suppressions:
+        suppressions.remove("Localization")
+    if "LocalizationWarning" in suppressions:
+        suppressions.remove("LocalizationWarning")
+
     # if "DevShadersDetailed" in suppressions:
     #     suppressions.remove("DevShadersDetailed")
 
