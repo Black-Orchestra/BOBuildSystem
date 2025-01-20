@@ -485,9 +485,12 @@ async def install_rs2_server(
     )
 
 
-async def install_workshop_item(
+# TODO: check workshop updates function.
+# TODO: function to move downloaded items to RS2 cache.
+
+async def download_workshop_item(
         steamcmd_config: SteamCmdConfig,
-        force_install_dir: Path,
+        download_dir: Path,
         workshop_item_id: int,
         username: str,
         password: str,
@@ -503,7 +506,7 @@ async def install_workshop_item(
         username,
         password,
         "+force_install_dir",
-        str(force_install_dir.resolve()),
+        str(download_dir.resolve()),
         "+workshop_download_item",
         str(RS2_APPID),
         str(workshop_item_id),
