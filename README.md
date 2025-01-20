@@ -51,20 +51,21 @@ TODO: document these.
 
 ## Development TODOs
 
-Setup script to run BO server as a Windows service:
-
-1. fetch BO packages (check result)
-2. fetch BO maps (check result)
-3. get latest code from github (check result)
-4. compile code (check result)
-5. cook the entire mod (check result)
-6. stop running server(s) (check result)
-7. move updated files to server (check result)
-8. start server(s) (check result)
-
-9. optional: upload files to workshop
-
-Optional: get the files from workshop
+- Setup script to run BO server as a Windows service.
+- Server installation:
+    - Make sure up to date DLLs are fetched from Steam.
+    - Make sure server configuration is correct:
+        - WebAdmin enabled, correct port.
+        - Suppression of useful logs removed.
+        - Chat logs, etc. enabled.
+    - Make sure GAM packages are installed!
+- Server workshop handling:
+    - Private items -> can't leverage built-in SWS downloader?
+        - Try to download them manually with SteamCMD.
+        - Still put them in server's list of SWS items?
+        - What happens to clients who can see the items when they join
+          the server, but the server itself can't see them? The server
+          will still have the files. Investigate.
 
 ## License
 
