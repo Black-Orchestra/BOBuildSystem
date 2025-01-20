@@ -566,7 +566,7 @@ async def check_for_updates(
                 logger.info("removing map '{}' from Unpublished", unpub_roe)
                 unpub_roe.unlink(missing_ok=True)
 
-        ww2u = rs2_config.unpublished_dir / "CookedPC/WW2.u"
+        ww2u = rs2_config.unpublished_dir / "CookedPC/Script/WW2.u"
         logger.info("removing '{}' to force script compilation", ww2u)
         ww2u.unlink(missing_ok=True)
 
