@@ -514,6 +514,7 @@ async def workshop_status(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
     )
+    # TODO: parse this output!
     _, out, _ = await run_cmd(
         steamcmd_config.exe_path,
         "+force_install_dir",
@@ -529,6 +530,7 @@ async def workshop_status(
         return_output=True,
         steamguard_code=code,
     )
+    # TODO: return a list of statuses? Custom dataclasses?
     return out
 
 
