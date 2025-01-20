@@ -188,7 +188,7 @@ def map_ids_factory() -> dict[str, int]:
 
 @dataclass(frozen=True)
 class RS2Config:
-    bo_dev_beta_workshop_id: int = 3404127489
+    bo_dev_beta_workshop_id: int = 3411256768
     bo_dev_beta_map_ids: dict[str, int] = field(default_factory=map_ids_factory)
 
     @cachedproperty
