@@ -1,0 +1,15 @@
+services:
+  discord-gsm:
+    image: discordgsm/discord-game-server-monitor:latest
+    container_name: discord-game-server-monitor
+    volumes:
+      - "discord-game-server-monitor-data:/usr/src/app/data"
+    environment:
+      APP_TOKEN: ${BO_DISCORD_GSM_APP_TOKEN}
+      WHITELIST_GUILDS: ${BO_DISCORD_GSM_WHITELIST_GUILDS}
+    restart: always
+    command: python main.py
+
+volumes:
+  discord-game-server-monitor-data:
+    driver: local
