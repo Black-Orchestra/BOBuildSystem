@@ -67,6 +67,9 @@ TODO: document these.
           the server, but the server itself can't see them? The server
           will still have the files. Investigate.
 
+- Investigate using free-threaded Python once all the dependencies
+  support it. This is probably only possible in the far future.
+
 ## License
 
 ```
