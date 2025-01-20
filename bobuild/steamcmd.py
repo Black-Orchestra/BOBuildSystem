@@ -8,6 +8,7 @@ import time
 import zipfile
 from functools import partial
 from pathlib import Path
+from typing import Callable
 from typing import Literal
 from typing import overload
 
@@ -436,16 +437,21 @@ async def get_steamguard_code(
 
 
 async def install_rs2(
-        config: RS2Config,
-        steamcmd_config: SteamCmdConfig,
+        *_,
+        rs2_config: RS2Config | None = None,
+        steamcmd_config: SteamCmdConfig | None = None,
+        **__,
 ):
+    if (rs2_config is None) or (steamcmd_config is None):
+        raise RuntimeError("rs2_config and steamcmd_config required")
+
     code = await get_steamguard_code(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
     )
     await install_validate_app(
         steamcmd_config.exe_path,
-        install_dir=config.game_install_dir,
+        install_dir=rs2_config.game_install_dir,
         app_id=RS2_APPID,
         username=steamcmd_config.username,
         password=steamcmd_config.password,
@@ -454,16 +460,21 @@ async def install_rs2(
 
 
 async def install_rs2_sdk(
-        config: RS2Config,
-        steamcmd_config: SteamCmdConfig,
+        *_,
+        rs2_config: RS2Config | None = None,
+        steamcmd_config: SteamCmdConfig | None = None,
+        **__,
 ):
+    if (rs2_config is None) or (steamcmd_config is None):
+        raise RuntimeError("rs2_config and steamcmd_config required")
+
     code = await get_steamguard_code(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
     )
     await install_validate_app(
         steamcmd_config.exe_path,
-        install_dir=config.game_install_dir,
+        install_dir=rs2_config.game_install_dir,
         app_id=RS2_SDK_APPID,
         username=steamcmd_config.username,
         password=steamcmd_config.password,
@@ -472,12 +483,17 @@ async def install_rs2_sdk(
 
 
 async def install_rs2_server(
-        config: RS2Config,
-        steamcmd_config: SteamCmdConfig,
+        *_,
+        rs2_config: RS2Config | None = None,
+        steamcmd_config: SteamCmdConfig | None = None,
+        **__,
 ):
+    if (rs2_config is None) or (steamcmd_config is None):
+        raise RuntimeError("rs2_config and steamcmd_config required")
+
     await install_validate_app(
         steamcmd_config.exe_path,
-        install_dir=config.server_install_dir,
+        install_dir=rs2_config.server_install_dir,
         app_id=RS2_DS_APPID,
         username="anonymous",
         password="",
@@ -485,8 +501,34 @@ async def install_rs2_server(
     )
 
 
-# TODO: check workshop updates function.
 # TODO: function to move downloaded items to RS2 cache.
+
+async def workshop_status(
+        steamcmd_config: SteamCmdConfig,
+        download_dir: Path,
+        username: str,
+        password: str,
+) -> str:
+    # TODO: test this!
+    code = await get_steamguard_code(
+        steamcmd_config.steamguard_cli_path,
+        steamcmd_config.steamguard_passkey,
+    )
+    _, out, _ = await run_cmd(
+        steamcmd_config.exe_path,
+        "+login",
+        username,
+        password,
+        "+force_install_dir",
+        str(download_dir.resolve()),
+        "+workshop_status",
+        str(RS2_APPID),
+        raise_on_error=True,
+        return_output=True,
+        steamguard_code=code,
+    )
+    return out
+
 
 async def download_workshop_item(
         steamcmd_config: SteamCmdConfig,
@@ -515,32 +557,66 @@ async def download_workshop_item(
     )
 
 
+async def print_workshop_status(
+        *_,
+        steamcmd_config: SteamCmdConfig | None = None,
+        workshop_dir: Path | None = None,
+        **__,
+):
+    if (steamcmd_config is None) or (workshop_dir is None):
+        raise RuntimeError("rs2_config and steamcmd_config required")
+
+    print(await workshop_status(
+        steamcmd_config,
+        workshop_dir,
+        steamcmd_config.username,
+        steamcmd_config.password,
+    ))
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser()
 
-    cfg = RS2Config()
-    rs2_game_path = cfg.game_install_dir
-    rs2_server_path = cfg.server_install_dir
+    rs2_cfg = RS2Config()
+    steamcmd_cfg = SteamCmdConfig()
+    rs2_game_path = rs2_cfg.game_install_dir
+    rs2_server_path = rs2_cfg.server_install_dir
     logger.info("rs2_game_path: '{}'", rs2_game_path)
     logger.info("rs2_server_path: '{}'", rs2_server_path)
+    logger.info("SteamCMD path: '{}'", steamcmd_cfg.exe_path)
 
-    action_choices = {
+    action_choices: dict[str, Callable] = {
         "install_rs2": install_rs2,
         "install_rs2_sdk": install_rs2_sdk,
         "install_rs2_server": install_rs2_server,
+        "workshop_status": print_workshop_status,
     }
     ap.add_argument(
         "action",
         choices=action_choices.keys(),
         help="action to perform",
     )
-
-    steamcmd_cfg = SteamCmdConfig()
+    ap.add_argument(
+        "--workshop-dir",
+        required=False,
+        help="workshop download directory path for print_workshop_status command",
+    )
 
     args = ap.parse_args()
     action = args.action
+
+    sws_dir = args.workshop_dir
+    if sws_dir:
+        sws_dir_path = Path(sws_dir).absolute()
+    else:
+        sws_dir_path = None
+
     logger.info("performing action: {}", action)
-    await action_choices[args.action](cfg, steamcmd_cfg)
+    await action_choices[args.action](
+        rs2_config=rs2_cfg,
+        steamcmd_config=steamcmd_cfg,
+        workshop_dir=sws_dir_path,
+    )  # type: ignore[operator]
     logger.info("exiting")
 
 
