@@ -516,11 +516,11 @@ async def workshop_status(
     )
     _, out, _ = await run_cmd(
         steamcmd_config.exe_path,
+        "+force_install_dir",
+        str(download_dir.resolve()),
         "+login",
         username,
         password,
-        "+force_install_dir",
-        str(download_dir.resolve()),
         "+workshop_status",
         str(RS2_APPID),
         "+logoff",
