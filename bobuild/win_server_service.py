@@ -48,6 +48,14 @@ from bobuild.workshop import WorkshopManifest
 STOP_EVENT = asyncio.Event()
 ASYNC_MAIN_DONE_EVENT = threading.Event()
 
+# https://mhammond.github.io/pywin32/SERVICE_STATUS.html
+ServiceStatusType = tuple[int, int, int, int, int, int, int]
+
+
+def get_status(service_name: str) -> int:
+    status: ServiceStatusType = win32serviceutil.QueryServiceStatus(service_name)
+    return status[1]
+
 
 class BOWinServerService(win32serviceutil.ServiceFramework):
     _svc_name_ = "BOWinServerService"
@@ -500,15 +508,6 @@ def main() -> None:
         cfg_dir = get_config_dir()
         log_info(f"removing service config directory: '{cfg_dir}'")
         shutil.rmtree(cfg_dir, ignore_errors=True)
-
-
-# https://mhammond.github.io/pywin32/SERVICE_STATUS.html
-ServiceStatusType = tuple[int, int, int, int, int, int, int]
-
-
-def get_status(service_name: str) -> int:
-    status: ServiceStatusType = win32serviceutil.QueryServiceStatus(service_name)
-    return status[1]
 
 
 if __name__ == "__main__":
