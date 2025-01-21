@@ -71,8 +71,12 @@ class BOWinServerService(win32serviceutil.ServiceFramework):
 
     @classmethod
     def cstatus(cls) -> int:
-        # TODO: is this call expensive?
-        return get_status(cls._svc_name_)
+        # TODO: ONLY USE THIS SPARINGLY! UNNECESSARILY EXPENSIVE?
+        # noinspection PyBroadException
+        try:
+            return get_status(cls._svc_name_)
+        except Exception:
+            return win32service.SERVICE_STOPPED
 
     @classmethod
     def parse_args(cls, args: list[str]):
@@ -375,6 +379,7 @@ async def is_running(proc: asyncio.subprocess.Process) -> bool:
 
 
 async def main_task(
+        service: BOWinServerService,
         rs2_config: RS2Config,
         steamcmd_config: SteamCmdConfig,
         discord_config: DiscordConfig,
@@ -383,10 +388,10 @@ async def main_task(
 
     workshop_items: list[int] = [rs2_config.bo_dev_beta_workshop_id]
     workshop_items += list(rs2_config.bo_dev_beta_map_ids.values())
-    log_info(f"workshop item count: {len(workshop_items)}")
+    service.log_info(f"workshop item count: {len(workshop_items)}")
 
     pidfile_path = make_pidfile_path()
-    log_info(f"using pidfile_path: '{pidfile_path}'")
+    service.log_info(f"using pidfile_path: '{pidfile_path}'")
     pidfile_path.parent.mkdir(parents=True, exist_ok=True)
 
     server_proc: asyncio.subprocess.Process | None = None
@@ -394,18 +399,18 @@ async def main_task(
     update_check_interval = 60
 
     if pidfile_path.exists():
-        log_warning(f"pidfile: '{pidfile_path}' exists, old BO server process not cleaned up?")
+        service.log_warning(f"pidfile: '{pidfile_path}' exists, old BO server process not cleaned up?")
         try:
             _pids = read_pids(pidfile_path)
             await terminate_many(_pids)
         except Exception as e:
-            log_warning(f"error terminating process: {type(e).__name__}: {e}")
+            service.log_warning(f"error terminating process: {type(e).__name__}: {e}")
 
     pidfile_path.unlink(missing_ok=True)
 
     while not await asyncio.wait_for(STOP_EVENT.wait(), timeout=1.0):
         if time.time() > (update_check_interval + update_check_time):
-            log_info("checking for BO Steam Workshop updates")
+            service.log_info("checking for BO Steam Workshop updates")
             # await steamcmd_update(
             #     steamcmd_install_script_path,
             #     steamcmd_update_script_path,
@@ -448,7 +453,7 @@ async def main_task(
         if server_proc and not STOP_EVENT.is_set():
             if not await is_running(server_proc):
                 ec = await server_proc.wait()
-                log_info(
+                service.log_info(
                     f"process {server_proc} exited with code: {ec}, "
                     f"needs to be restarted")
                 server_proc = None
