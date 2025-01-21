@@ -650,6 +650,7 @@ async def main() -> None:
         rs2_config=rs2_cfg,
         steamcmd_config=steamcmd_cfg,
         workshop_dir=sws_dir_path,
+        workshop_item_id=args.workshop_item_id,
     )  # type: ignore[operator]
     logger.info("exiting")
 
