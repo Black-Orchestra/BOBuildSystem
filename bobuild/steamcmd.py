@@ -424,8 +424,11 @@ async def get_steamguard_code(
             return_output=True,
             redact=partial(redact, passkey),
         ))[1].strip()
+
+        # TODO: need to store this somewhere on disk/registry too..
         if code != _USED_CODE:
             break
+
         logger.info("waiting for a fresh steamguard code")
         await asyncio.sleep(3.0)
 
@@ -659,3 +662,6 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio_run(main())
+
+# TODO: detect login failures when running steamcmd, from log output! E.g.:
+#   Logging in user 'blackorchestrabot' [U:1:1850641051] to Steam Public...FAILED (Rate Limit Exceeded)
