@@ -554,6 +554,8 @@ async def download_workshop_item(
         "+workshop_download_item",
         str(RS2_APPID),
         str(workshop_item_id),
+        "+logoff",
+        "+quit",
         raise_on_error=True,
         steamguard_code=code,
     )
