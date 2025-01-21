@@ -7,6 +7,7 @@ Update workflow (when SWS update is available):
 2. Shut down server.
 3. Update workshop items (notify discord on status).
 4. Move updated items to server Cache.
+    - For updated items, DELETE ALL EXISTING BEFORE COPY!
 5. Ensure config is correct.
     - Read metadata from SWS manifests.
     - Ensure WebAdmin is enabled (and port is correct).
@@ -19,8 +20,10 @@ Update workflow (when SWS update is available):
 
 import argparse
 import asyncio
+import contextlib
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -33,21 +36,17 @@ import vdf
 import win32service
 import win32serviceutil
 
+from bobuild.config import DiscordConfig
 from bobuild.config import RS2Config
 from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
+from bobuild.log import stdout_handler_id
 from bobuild.utils import asyncio_run
 from bobuild.utils import get_var
+from bobuild.workshop import WorkshopManifest
 
 STOP_EVENT = asyncio.Event()
 ASYNC_MAIN_DONE_EVENT = threading.Event()
-
-if not (get_var("BO_LOG_FILE", None)):
-    # Avoid writing to the "regular" log file form the service.
-    # TODO: this is still kinda error prone and the logging setup
-    #   should definitely be improved.
-    raise RuntimeError(
-        "BO_LOG_FILE is required to be set for the service environment")
 
 
 class BOWinServerService(win32serviceutil.ServiceFramework):
@@ -55,11 +54,16 @@ class BOWinServerService(win32serviceutil.ServiceFramework):
     _svc_display_name_ = "Black Orchestra Windows Server Service"
     _svc_description_ = "Runs Black Orchestra Windows Server and handles automatic updates."
 
-    rs2_config = RS2Config()
-    steamcmd_config = SteamCmdConfig()
+    # Shorthand to avoid "protected" member IDE warnings.
+    svc_name = _svc_name_
+
+    rs2_config: RS2Config
+    steamcmd_config: SteamCmdConfig
+    discord_config: DiscordConfig
 
     @classmethod
     def cstatus(cls) -> int:
+        # TODO: is this call expensive?
         return get_status(cls._svc_name_)
 
     @classmethod
@@ -110,16 +114,23 @@ class BOWinServerService(win32serviceutil.ServiceFramework):
     def SvcDoRun(self):
         self.log_info("starting")
 
-        # TODO: in case of service restart, do we need to load
-        #   config here again? Surely it does not persist in memory?
-        #   Do it anyway just in case.
+        # Inject stored config into env, then build config objects.
         global CONFIG_PATH
         CONFIG_PATH = make_config_path()
+        cfg = load_config(CONFIG_PATH)
+        self.log_info(f"loaded {len(cfg)} config keys")
+        for key, value in cfg.items():
+            os.environ[key] = str(value)
+
+        BOWinServerService.rs2_config = RS2Config()
+        BOWinServerService.steamcmd_config = SteamCmdConfig()
+        BOWinServerService.discord_config = DiscordConfig()
 
         self.status = win32service.SERVICE_RUNNING
         asyncio_run(main_task(
             BOWinServerService.rs2_config,
             BOWinServerService.steamcmd_config,
+            BOWinServerService.discord_config,
         ))
 
 
@@ -127,10 +138,9 @@ def get_config_dir() -> Path:
     try:
         appdata = Path(os.environ["LOCALAPPDATA"]).resolve()
     except KeyError:
-        logger.error("cannot get LOCALAPPDATA from environment")
+        log_error("cannot get LOCALAPPDATA from environment")
         raise
-    # noinspection PyProtectedMember
-    return appdata / BOWinServerService._svc_name_
+    return appdata / BOWinServerService.svc_name
 
 
 def make_config_path() -> Path:
@@ -141,6 +151,10 @@ def make_pidfile_path() -> Path:
     return get_config_dir() / "pidfile.txt"
 
 
+def load_config(path: Path) -> dict[str, str]:
+    return orjson.loads(path.read_bytes())
+
+
 CONFIG_PATH = make_config_path()
 
 
@@ -148,54 +162,59 @@ def log_info(msg: str, state: int = BOWinServerService.cstatus()):
     # TODO: does this crash? (Same goes for warning and error logs)!
     # https://github.com/mhammond/pywin32/issues/2155
 
-    # noinspection PyProtectedMember
     servicemanager.LogMsg(
         servicemanager.EVENTLOG_INFORMATION_TYPE,
         state,
-        (BOWinServerService._svc_name_, msg),
+        (BOWinServerService.svc_name, msg),
     )
     logger.info(msg)
 
 
 def log_warning(msg: str, state: int = BOWinServerService.cstatus()):
-    # noinspection PyProtectedMember
     servicemanager.LogMsg(
         servicemanager.EVENTLOG_WARNING_TYPE,
         state,
-        (BOWinServerService._svc_name_, msg),
+        (BOWinServerService.svc_name, msg),
     )
     logger.warning(msg)
 
 
 def log_error(msg: str, state: int = BOWinServerService.cstatus()):
-    # noinspection PyProtectedMember
     servicemanager.LogMsg(
         servicemanager.EVENTLOG_WARNING_TYPE,
         state,
-        (BOWinServerService._svc_name_, msg),
+        (BOWinServerService.svc_name, msg),
     )
     logger.error(msg)
 
 
-async def terminate_server(server_proc: psutil.Process, timeout: float = 5.0):
-    children = server_proc.children(recursive=True)
+async def terminate_server(
+        server_proc: asyncio.subprocess.Process | psutil.Process,
+        timeout: float = 5.0,
+):
+    if isinstance(server_proc, asyncio.subprocess.Process):
+        server_proc_handle = psutil.Process(server_proc.pid)
+    else:
+        server_proc_handle = server_proc
+
+    children = server_proc_handle.children(recursive=True)
     try:
-        server_proc.terminate()
+        server_proc_handle.terminate()
     except psutil.Error:
         pass
     next_timeout = time.time() + timeout
-    while server_proc.is_running() and (time.time() < next_timeout):
+    while server_proc_handle.is_running() and (time.time() < next_timeout):
         await asyncio.sleep(0.1)
 
-    if server_proc.is_running():
-        log_warning(f"process {server_proc.pid} did not stop gracefully, killing it")
+    if server_proc_handle.is_running():
+        log_warning(f"process {server_proc_handle.pid} did not stop gracefully, killing it")
         for child in children:
             try:
                 child.kill()
             except psutil.Error:
                 pass
         try:
-            server_proc.kill()
+            server_proc_handle.kill()
         except psutil.Error:
             pass
 
@@ -272,12 +291,12 @@ async def steamcmd_update(
         else:
             log_warning(f"{pattern} does not match output")
 
-    log_info(f"XV83 server needs_update={needs_update}")
+    log_info(f"BO server needs_update={needs_update}")
 
     if not needs_update:
         return
 
-    # Shut down XV83 server if it's running.
+    # Shut down BO server if it's running.
     if server_proc is not None:
         log_info(f"terminating running server process: {server_proc}")
         try:
@@ -307,25 +326,14 @@ async def steamcmd_update(
     log_info(f"{steamcmd_proc} exited with code: {ec}")
 
 
-def read_changelist(build_id_file_path: Path) -> str:
-    if not build_id_file_path.exists():
-        log_warning(f"'{build_id_file_path}' does not exist")
-        return "CL???"
-
-    try:
-        # BuildName=BDG-jenkins-83-117  P4ChangeList=73767
-        text = build_id_file_path.read_text().strip()
-        p4cl = text.split(" ")[-1]
-        return f"CL{p4cl.split("=")[1]}"
-    except Exception as e:
-        log_warning(f"error reading Build ID file: {type(e).__name__}: {e}")
-
-    return "CL???"
-
-
-# TODO: manifest reading. Discover these from Cache!
-def read_manifest():
-    pass
+def read_manifest(
+        rs2_cfg: RS2Config,
+        # item_id: id,
+) -> WorkshopManifest:
+    raise NotImplementedError
+    # TODO: do we read
+    # manifest_dir = rs2_cfg.server_workshop_dir
+    # return WorkshopManifest()
 
 
 async def terminate_many(pids: list[int]):
@@ -352,33 +360,33 @@ def read_pids(pidfile_path: Path) -> list[int]:
     ]
 
 
+async def is_running(proc: asyncio.subprocess.Process) -> bool:
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(proc.wait(), timeout=1e-6)
+    return proc.returncode is None
+
+
 async def main_task(
         rs2_config: RS2Config,
         steamcmd_config: SteamCmdConfig,
+        discord_config: DiscordConfig,
 ) -> None:
     global ASYNC_MAIN_DONE_EVENT
 
-    # noinspection PyProtectedMember
+    workshop_items: list[int] = [rs2_config.bo_dev_beta_workshop_id]
+    workshop_items += list(rs2_config.bo_dev_beta_map_ids.values())
+    log_info(f"workshop item count: {len(workshop_items)}")
+
     pidfile_path = make_pidfile_path()
     log_info(f"using pidfile_path: '{pidfile_path}'")
     pidfile_path.parent.mkdir(parents=True, exist_ok=True)
 
-    script_path = Path(cfg["server_start_script"]).resolve()
-    args = dict(cfg["server_start_args"])
-    server_name = str(args["ServerName"])
-    branch = str(args["Branch"])
-    port = str(args["Port"])
-    query_port = str(args["QueryPort"])
-    steamcmd_install_script_path = Path(cfg["steamcmd_install_script_path"])
-    steamcmd_update_script_path = Path(cfg["steamcmd_update_script_path"])
-    build_id_file_path = Path(cfg["build_id_file_path"])
-
-    s_proc_handle: psutil.Process | None = None
+    server_proc: asyncio.subprocess.Process | None = None
     update_check_time = 0
     update_check_interval = 60
 
     if pidfile_path.exists():
-        log_warning(f"pidfile: '{pidfile_path}' exists, old XV83 server process not cleaned up?")
+        log_warning(f"pidfile: '{pidfile_path}' exists, old BO server process not cleaned up?")
         try:
             _pids = read_pids(pidfile_path)
             await terminate_many(_pids)
@@ -387,70 +395,59 @@ async def main_task(
 
     pidfile_path.unlink(missing_ok=True)
 
-    while True:
-        if await asyncio.wait_for(STOP_EVENT.wait(), timeout=0.5):
-            break
-
+    while not await asyncio.wait_for(STOP_EVENT.wait(), timeout=1.0):
         if time.time() > (update_check_interval + update_check_time):
-            log_info("checking for app updates")
-            await steamcmd_update(
-                steamcmd_install_script_path,
-                steamcmd_update_script_path,
-                branch,
-                pidfile_path,
-                s_proc_handle,
-            )
+            log_info("checking for BO Steam Workshop updates")
+            # await steamcmd_update(
+            #     steamcmd_install_script_path,
+            #     steamcmd_update_script_path,
+            #     branch,
+            #     pidfile_path,
+            #     s_proc_handle,
+            # )
             update_check_time = time.time()
 
-        if not s_proc_handle:
-            log_info("running server start script")
-            changelist = read_changelist(build_id_file_path)
-            full_server_name = f"{server_name} {changelist}"
-            script_proc = await asyncio.create_subprocess_exec(
-                "powershell.exe",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                str(script_path),
-                *(
-                    f"-ServerName \"{full_server_name}\"",
-                    f"-Branch \"{branch}\"",
-                    f"-Port \"{port}\"",
-                    f"-QueryPort \"{query_port}\"",
-                ),
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            # Wait a bit to let it start all children.
-            await asyncio.sleep(1.0)
+            if not server_proc:
+                #         log_info("running server start script")
+                #         changelist = read_changelist(build_id_file_path)
+                #         full_server_name = f"{server_name} {changelist}"
+                #         server_proc = await asyncio.create_subprocess_exec(
+                #             "powershell.exe",
+                #             "-NoProfile",
+                #             "-ExecutionPolicy", "Bypass",
+                #             str(script_path),
+                #             *(
+                #                 f"-ServerName \"{full_server_name}\"",
+                #                 f"-Branch \"{branch}\"",
+                #                 f"-Port \"{port}\"",
+                #                 f"-QueryPort \"{query_port}\"",
+                #             ),
+                #             stderr=asyncio.subprocess.STDOUT,
+                #         )
+                #         # Wait a bit to let it start all children.
+                #         await asyncio.sleep(1.0)
+                #
+                # This isn't necessarily reliable, but better than nothing.
+                s_proc_handle = psutil.Process(server_proc.pid)
+                pids = [
+                    str(child.pid)
+                    for child in s_proc_handle.children()
+                ]
+                pids.append(str(s_proc_handle.pid))
+                pids_str = "\n".join(pids)
+                pidfile_path.write_text(pids_str)
 
-            # This isn't necessarily reliable, but better than nothing.
-            s_proc_handle = psutil.Process(script_proc.pid)
-            pids = [
-                str(child.pid)
-                for child in s_proc_handle.children()
-            ]
-            pids.append(str(s_proc_handle.pid))
-            pids_str = "\n".join(pids)
-            pidfile_path.write_text(pids_str)
-
-        # NOTE: it's possible stop was requested after entering
-        # the loop, check again here to avoid unneeded work.
-        if STOP_EVENT.is_set():
-            sleep_time = 0.0
-        else:
-            sleep_time = 2.0
-        if s_proc_handle and not STOP_EVENT.is_set():
-            if not s_proc_handle.is_running():
-                ec = s_proc_handle.wait(timeout=1.0)
+        if server_proc and not STOP_EVENT.is_set():
+            if not await is_running(server_proc):
+                ec = await server_proc.wait()
                 log_info(
-                    f"process {s_proc_handle} exited with code: {ec}, "
+                    f"process {server_proc} exited with code: {ec}, "
                     f"needs to be restarted")
-                s_proc_handle = None
+                server_proc = None
 
-        await asyncio.sleep(sleep_time)
-
-    if s_proc_handle:
+    if server_proc:
         await (await asyncio.create_subprocess_shell(
-            f"taskkill.exe /pid {s_proc_handle.pid} > nul 2>&1"
+            f"taskkill.exe /pid {server_proc.pid} > nul 2>&1"
         )).wait()
         # A bit of grace shutdown time.
         await asyncio.sleep(1.0)
@@ -458,20 +455,10 @@ async def main_task(
         # The nuclear option in case it hung.
         _pids = read_pids(pidfile_path)
         await terminate_many(_pids)
-        await terminate_server(s_proc_handle, timeout=1.0)
+        await terminate_server(server_proc, timeout=1.0)
 
     ASYNC_MAIN_DONE_EVENT.set()
     pidfile_path.unlink(missing_ok=True)
-
-
-def load_config() -> ServiceConfig:
-    text = CONFIG_PATH.read_text().strip()
-    if not text:
-        log_warning(f"config was empty in '{CONFIG_PATH}'")
-        # TODO: construct default config here!
-        return ServiceConfig()
-    cfg = orjson.loads(text)
-    return cfg
 
 
 def main() -> None:
@@ -483,8 +470,36 @@ def main() -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.touch(exist_ok=True)
 
+    if "debug" not in svc_args:
+        # No point in logging to stdout inside the actual service!
+        logger.remove(stdout_handler_id)
+
     svc_args = [sys.argv[0]] + svc_args
     BOWinServerService.parse_args(svc_args)
+
+    # When we get here it's safe to assume the service has been
+    # installed and the registry entries for it exist.
+    if "install" in svc_args:
+        if not (_bo_log_file := get_var("BO_LOG_FILE", None)):
+            # Avoid writing to the "regular" log file form the service.
+            # TODO: this is still kinda error prone and the logging setup
+            #   should definitely be improved.
+            raise RuntimeError(
+                "BO_LOG_FILE is required to be set for the service environment")
+
+        # TODO: could be error prone, but fuck it.
+        cfg_dict = {
+            key: os.environ[key]
+            for key in os.environ
+            if key.startswith("BO_")
+        }
+        log_info(f"storing {len(cfg_dict)} env vars that stared with 'BO_'")
+        CONFIG_PATH.write_bytes(orjson.dumps(cfg_dict))
+
+    if "remove" in svc_args:
+        cfg_dir = get_config_dir()
+        log_info(f"removing service config directory: '{cfg_dir}'")
+        shutil.rmtree(cfg_dir, ignore_errors=True)
 
 
 # https://mhammond.github.io/pywin32/SERVICE_STATUS.html
@@ -501,7 +516,6 @@ if __name__ == "__main__":
         main()
     except Exception as _e:
         _msg = f"unhandled exception: {type(_e).__name__}: {_e}"
-        # noinspection PyProtectedMember
         log_error(_msg)
         print(_msg)
         raise

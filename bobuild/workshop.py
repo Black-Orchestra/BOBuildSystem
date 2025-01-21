@@ -412,6 +412,12 @@ def dump_manifest(manifest: WorkshopManifest, out_file: Path):
         ))
 
 
+def load_manifest(file: Path) -> WorkshopManifest:
+    file = file.resolve()
+    logger.info("reading SWS manifest: '{}'", file)
+    return WorkshopManifest(**orjson.loads(file.read_bytes()))
+
+
 def make_sws_manifest(
         out_file: Path,
         content_folder: Path,

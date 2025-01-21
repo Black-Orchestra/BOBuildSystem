@@ -38,12 +38,12 @@ bo_log_format = (
     " - <level>{message}</level>"
 )
 
-logger.add(
+stdout_handler_id = logger.add(
     sys.stdout,
     format=bo_log_format,
 )
 
-logger.add(
+log_file_handler_id = logger.add(
     _log_file,
     rotation="50 MB",
     retention=5,

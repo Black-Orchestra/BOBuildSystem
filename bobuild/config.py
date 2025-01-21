@@ -2,6 +2,7 @@ import platform
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
+from typing import Any
 
 from boltons.cacheutils import cachedproperty
 
@@ -23,6 +24,24 @@ else:
     _default_rs2_game_dir = "__TODO__"
     _default_rs2_server_dir = "__TODO__"
     _steamcmd_exe_name = "steamcmd.sh"
+
+
+def config_asdict(
+        obj: object,
+        value_types: tuple[type, ...] = (int, str, Path),
+) -> dict[str, Any]:
+    """Return config dataclass as dict, including cachedproperties."""
+    d = {}
+    for ann in obj.__annotations__:
+        val = getattr(obj, ann)
+        if isinstance(val, value_types):
+            d[ann] = val
+    for key, value in type(obj).__dict__.items():
+        if isinstance(value, cachedproperty):
+            val = getattr(obj, key)
+            if isinstance(val, value_types):
+                d[key] = val
+    return d
 
 
 @dataclass(frozen=True)
@@ -206,11 +225,11 @@ class RS2Config:
         return Path.home() / "Documents/My Games/Rising Storm 2/"
 
     @cachedproperty
-    def documents_config_dir(self):
+    def documents_config_dir(self) -> Path:
         return self.rs2_documents_dir / "ROGame/Config/"
 
     @cachedproperty
-    def documents_localization_dir(self):
+    def documents_localization_dir(self) -> Path:
         return self.rs2_documents_dir / "ROGame/Localization/"
 
     @cachedproperty
@@ -222,8 +241,16 @@ class RS2Config:
         return self.rs2_documents_dir / "ROGame/Unpublished/"
 
     @cachedproperty
-    def vneditor_exe(self):
+    def vneditor_exe(self) -> Path:
         return self.game_install_dir / "Binaries/Win64/VNEditor.exe"
+
+    @cachedproperty
+    def server_workshop_dir(self) -> Path:
+        return self.server_install_dir / "steamapps/workshop/"
+
+    @cachedproperty
+    def server_cache_dir(self) -> Path:
+        return self.server_install_dir / "ROGame/Cache/"
 
 
 @dataclass(frozen=True)
@@ -231,3 +258,7 @@ class DiscordConfig:
     @cachedproperty
     def builds_webhook_url(self) -> str:
         return get_var("BO_DISCORD_BUILDS_WEBHOOK")
+
+    @cachedproperty
+    def server_service_webhook_url(self) -> str:
+        return get_var("BO_DISCORD_SERVER_SERVICE_WEBHOOK")
