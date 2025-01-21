@@ -508,13 +508,11 @@ async def workshop_status(
         download_dir: Path,
         username: str,
         password: str,
-) -> str:
-    # TODO: test this!
+) -> list[str]:
     code = await get_steamguard_code(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
     )
-    # TODO: parse this output!
     _, out, _ = await run_cmd(
         steamcmd_config.exe_path,
         "+force_install_dir",
@@ -530,8 +528,9 @@ async def workshop_status(
         return_output=True,
         steamguard_code=code,
     )
-    # TODO: return a list of statuses? Custom dataclasses?
-    return out
+
+    # TODO:
+    return out.split("\n")
 
 
 async def download_workshop_item(
@@ -541,7 +540,6 @@ async def download_workshop_item(
         username: str,
         password: str,
 ):
-    # TODO: test this!
     code = await get_steamguard_code(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
@@ -570,12 +568,37 @@ async def print_workshop_status(
     if (steamcmd_config is None) or (workshop_dir is None):
         raise RuntimeError("rs2_config and steamcmd_config required")
 
-    print(await workshop_status(
+    statuses = await workshop_status(
         steamcmd_config,
         workshop_dir,
         steamcmd_config.username,
         steamcmd_config.password,
-    ))
+    )
+    for status in statuses:
+        print(status)
+
+
+async def do_download_workshop_item(
+        *_,
+        steamcmd_config: SteamCmdConfig | None = None,
+        workshop_dir: Path | None = None,
+        workshop_item_id: int | None = None,
+        **__,
+):
+    if ((steamcmd_config is None)
+            or (workshop_dir is None)
+            or (workshop_item_id is None)
+    ):
+        raise RuntimeError(
+            "rs2_config, steamcmd_config, and workshop_item_id required")
+
+    await download_workshop_item(
+        steamcmd_config,
+        workshop_dir,
+        workshop_item_id=workshop_item_id,
+        username=steamcmd_config.username,
+        password=steamcmd_config.password,
+    )
 
 
 async def main() -> None:
@@ -594,6 +617,7 @@ async def main() -> None:
         "install_rs2_sdk": install_rs2_sdk,
         "install_rs2_server": install_rs2_server,
         "workshop_status": print_workshop_status,
+        "download_workshop_item": do_download_workshop_item,
     }
     ap.add_argument(
         "action",
@@ -604,6 +628,12 @@ async def main() -> None:
         "--workshop-dir",
         required=False,
         help="workshop download directory path for print_workshop_status command",
+    )
+    ap.add_argument(
+        "--workshop-item-id",
+        type=int,
+        required=False,
+        help="workshop item ID for actions that require it",
     )
 
     args = ap.parse_args()
