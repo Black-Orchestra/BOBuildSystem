@@ -24,7 +24,7 @@ from bobuild.run import read_stream_task
 from bobuild.run import run_process
 from bobuild.utils import asyncio_run
 from bobuild.utils import kill_process_tree
-from bobuild.utils import redact
+from bobuild.utils import redact as utils_redact
 
 # TODO: put these in a config class?
 RS2_APPID = 418460
@@ -43,6 +43,7 @@ async def run_cmd(
         raise_on_error: bool = False,
         return_output: Literal[True] = ...,
         steamguard_code: str | None = None,
+        redact: Callable[[str], str] | None = None,
 ) -> tuple[int, str, str]:
     ...
 
@@ -54,6 +55,7 @@ async def run_cmd(
         raise_on_error: bool = False,
         return_output: Literal[False] = ...,
         steamguard_code: str | None = None,
+        redact: Callable[[str], str] | None = None,
 ) -> tuple[int, None, None]:
     ...
 
@@ -64,6 +66,7 @@ async def run_cmd(
         raise_on_error: bool = False,
         return_output: bool = False,
         steamguard_code: str | None = None,
+        redact: Callable[[str], str] | None = None,
 ) -> tuple[int, None | str, None | str]:
     """Run SteamCMD command.
     If return_output is True, returns a tuple
@@ -87,9 +90,15 @@ async def run_cmd(
                 + steamcmd_args[login_idx + 3:]
         )
 
-        # TODO: redacting it here is a bit pointless unless we do it everywhere?
-        logger.info("running SteamCMD command: '{}'",
-                    redact(steamguard_code, steamcmd_args))
+        if redact is None:
+            def redact(x: str) -> str:
+                return x
+
+        logger.info(
+            "running SteamCMD command: '{}'",
+            [redact(x) for x in [utils_redact(steamguard_code, plaintext=arg)
+                                 for arg in steamcmd_args]]
+        )
     else:
         logger.info("running SteamCMD command: '{}'", steamcmd_args)
 
@@ -258,6 +267,7 @@ async def is_app_installed(
         raise_on_error=True,
         return_output=True,
         steamguard_code=steamguard_code,
+        redact=partial(utils_redact, password),
     )
 
     out += err
@@ -410,6 +420,9 @@ async def do_get_steamguard_code(
 ) -> str:
     code = None
 
+    def stdout_cb(_x: str) -> str:
+        return "*" * len(_x)
+
     to = time.time() + timeout
     while time.time() < to:
         code = (await run_process(
@@ -418,7 +431,8 @@ async def do_get_steamguard_code(
             cwd=steamguard_cli_path.parent,
             raise_on_error=True,
             return_output=True,
-            redact=partial(redact, passkey),
+            redact=partial(utils_redact, passkey),
+            stdout_callback=stdout_cb,
         ))[1].strip()
 
         if code != _USED_CODE:

@@ -10,7 +10,6 @@ from typing import Any
 from typing import Callable
 from typing import Coroutine
 from typing import IO
-from typing import Iterable
 from typing import Literal
 from typing import TypeVar
 from typing import overload
@@ -201,9 +200,10 @@ async def run_process(
         cwd: Path | None = None,
         raise_on_error: bool = False,
         return_output: Literal[True] = ...,
-        redact: Callable[[Iterable[str]], list[str]] | None = None,
+        redact: Callable[[str], str] | None = None,
         stop_event: asyncio.Event | None = None,
         buffer_lines: bool = False,
+        stdout_callback: Callable[[str], str] | None = None,
 ) -> tuple[int, str, str]:
     ...
 
@@ -215,9 +215,10 @@ async def run_process(
         cwd: Path | None = None,
         raise_on_error: bool = False,
         return_output: Literal[False] = ...,
-        redact: Callable[[Iterable[str]], list[str]] | None = None,
+        redact: Callable[[str], str] | None = None,
         stop_event: asyncio.Event | None = None,
         buffer_lines: bool = False,
+        stdout_callback: Callable[[str], str] | None = None,
 ) -> tuple[int, None, None]:
     ...
 
@@ -228,12 +229,18 @@ async def run_process(
         cwd: Path | None = None,
         raise_on_error: bool = False,
         return_output: bool = False,
-        redact: Callable[[Iterable[str]], list[str]] | None = None,
+        redact: Callable[[str], str] | None = None,
         stop_event: asyncio.Event | None = None,
         buffer_lines: bool = False,
+        stdout_callback: Callable[[str], str] | None = None,
 ) -> tuple[int, None | str, None | str]:
     if redact is not None:
-        logger.info("running program {}: {}, cwd={}", program, redact(args), cwd)
+        logger.info(
+            "running program {}: {}, cwd={}",
+            program,
+            [redact(x) for x in args],
+            cwd,
+        )
     else:
         logger.info("running program {}: {}, cwd={}", program, args, cwd)
 
@@ -260,17 +267,26 @@ async def run_process(
         if not proc.stderr:
             raise RuntimeError(f"process has no stderr: {proc}")
 
-        def line_cb(_lines: list[str], _name: str, _line: str):
+        def err_cb(_lines: list[str], _name: str, _line: str):
             logger.info("{}: {}", _name, _line)
             if return_output:
                 _lines.append(_line)
 
+        if stdout_callback is not None:
+            def out_cb(_lines: list[str], _name: str, _line: str):
+                _line = stdout_callback(_line)
+                logger.info("{}: {}", _name, _line)
+                if return_output:
+                    _lines.append(_line)
+        else:
+            out_cb = err_cb
+
         await asyncio.gather(
             read_stream_task_se(
-                proc.stdout, partial(line_cb, all_out, f"{pn} stdout"), stop_event, buffer_lines
+                proc.stdout, partial(out_cb, all_out, f"{pn} stdout"), stop_event, buffer_lines
             ),
             read_stream_task_se(
-                proc.stderr, partial(line_cb, all_err, f"{pn} stderr"), stop_event, buffer_lines
+                proc.stderr, partial(err_cb, all_err, f"{pn} stderr"), stop_event, buffer_lines
             ),
         )
 
