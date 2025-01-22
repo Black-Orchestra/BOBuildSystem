@@ -580,7 +580,7 @@ async def workshop_status(
         download_dir: Path,
         username: str,
         password: str,
-) -> list[str]:
+) -> list[tuple[int, str]]:
     code = await get_steamguard_code(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
@@ -612,7 +612,25 @@ async def workshop_status(
     # Workshop Content folder : "c:\rs2server\steamapps\workshop" - no update needed
     # - Item 3410909233 : installed (61294472 bytes, Mon Jan 20 12:19:31 2025),
 
-    return out.split("\n")
+    statuses = []
+    lines = out.splitlines()
+    start = f"Local workshop items for App {RS2_APPID}".lower()
+    in_block = False
+    for line in lines:
+        if start in line.lower():
+            in_block = True
+        elif in_block:
+            if line.startswith("Workshop Content folder"):
+                pass  # TODO: do something with this line?
+            elif line.startswith("- "):
+                parts = line.split(" ")
+                item_id = int(parts[2])
+                status = parts[4]
+                statuses.append((item_id, status))
+            else:
+                in_block = False
+
+    return statuses
 
 
 async def download_workshop_item(
