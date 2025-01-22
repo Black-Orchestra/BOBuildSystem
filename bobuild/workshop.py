@@ -487,6 +487,7 @@ async def main() -> None:
     ap.add_argument(
         "--maps-dir",
         help="path to a directory for actions that take map directory as an argument",
+        type=Path,
         required=False,
     )
 
@@ -494,14 +495,8 @@ async def main() -> None:
     action = args.action
     logger.info("performing action: {}", action)
 
-    maps_dir = args.maps_dir
-    if maps_dir:
-        maps_dir_path = Path(maps_dir).resolve()
-    else:
-        maps_dir_path = None
-
     await action_choices[args.action](
-        maps_dir=maps_dir_path,
+        maps_dir=args.maps_dir,
     )
     logger.info("exiting")
 

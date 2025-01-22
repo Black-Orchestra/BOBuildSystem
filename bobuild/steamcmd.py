@@ -632,6 +632,7 @@ async def main() -> None:
     ap.add_argument(
         "--workshop-dir",
         required=False,
+        type=Path,
         help="workshop download directory path for print_workshop_status command",
     )
     ap.add_argument(
@@ -644,17 +645,11 @@ async def main() -> None:
     args = ap.parse_args()
     action = args.action
 
-    sws_dir = args.workshop_dir
-    if sws_dir:
-        sws_dir_path = Path(sws_dir).absolute()
-    else:
-        sws_dir_path = None
-
     logger.info("performing action: {}", action)
     await action_choices[args.action](
         rs2_config=rs2_cfg,
         steamcmd_config=steamcmd_cfg,
-        workshop_dir=sws_dir_path,
+        workshop_dir=args.workshop_dir,
         workshop_item_id=args.workshop_item_id,
     )  # type: ignore[operator]
     logger.info("exiting")
