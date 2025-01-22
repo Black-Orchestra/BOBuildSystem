@@ -5,6 +5,7 @@ import platform
 import re
 import tempfile
 import time
+import winreg
 import zipfile
 from functools import partial
 from pathlib import Path
@@ -402,16 +403,11 @@ async def dry_run(steamcmd_path: Path):
     )
 
 
-async def get_steamguard_code(
+async def do_get_steamguard_code(
         steamguard_cli_path: Path,
         passkey: str,
         timeout: float = 60.0,
 ) -> str:
-    # NOTE: This is a bit of a hack. Since the codes are
-    # one-time use only, we need to make sure we don't
-    # return the same code more than once.
-    global _USED_CODE
-
     code = None
 
     to = time.time() + timeout
@@ -425,7 +421,6 @@ async def get_steamguard_code(
             redact=partial(redact, passkey),
         ))[1].strip()
 
-        # TODO: need to store this somewhere on disk/registry too..
         if code != _USED_CODE:
             break
 
@@ -435,8 +430,51 @@ async def get_steamguard_code(
     if code is None:
         raise RuntimeError("unable to get steamguard code")
 
-    _USED_CODE = code
-    return _USED_CODE
+    return code
+
+
+async def get_steamguard_code(
+        steamguard_cli_path: Path,
+        passkey: str,
+        timeout: float = 60.0,
+) -> str:
+    # NOTE: This is a bit of a hack. Since the codes are
+    # one-time use only, we need to make sure we don't
+    # return the same code more than once.
+    global _USED_CODE
+
+    key = r"SOFTWARE\BOBuildSystem"
+
+    hkey: winreg.HKEYType | None = None
+    try:
+        hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key)
+        _USED_CODE = winreg.QueryValueEx(hkey, "UsedCode")[0]
+    except FileNotFoundError:
+        pass
+    finally:
+        if hkey is not None:
+            hkey.Close()
+
+    code: str | None = None
+    try:
+        code = await do_get_steamguard_code(
+            steamguard_cli_path=steamguard_cli_path,
+            passkey=passkey,
+            timeout=timeout,
+        )
+        return code
+    finally:
+        if code is not None:
+            _USED_CODE = code
+            try:
+                hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key)
+            except FileNotFoundError:
+                hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key)
+            try:
+                winreg.SetValueEx(hkey, "UsedCode", None, winreg.REG_SZ, code)
+            finally:
+                if hkey is not None:
+                    hkey.Close()
 
 
 async def install_rs2(
@@ -537,6 +575,10 @@ async def workshop_status(
         return_output=True,
         steamguard_code=code,
     )
+
+    # Local workshop items for App 418460:
+    # Workshop Content folder : "c:\rs2server\steamapps\workshop" - no update needed
+    # - Item 3410909233 : installed (61294472 bytes, Mon Jan 20 12:19:31 2025),
 
     # TODO:
     return out.split("\n")
