@@ -719,7 +719,7 @@ Mercurial maps commit: {hg_maps_hash}.
         map_fs: list[Future] = []
         with ThreadPoolExecutor() as executor:
             for pub_sws_map in pub_sws_maps:
-                rel_path = pub_sws_map.relative_to(pub_maps_dir)
+                rel_path = pub_sws_map.relative_to(pub_maps_dir).parent
                 map_content_dir = map_sws_content_folders[pub_sws_map.stem] / rel_path
                 map_content_dir.mkdir(parents=True, exist_ok=True)
                 map_fs.append(executor.submit(
