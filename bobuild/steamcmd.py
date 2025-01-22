@@ -5,13 +5,17 @@ import platform
 import re
 import tempfile
 import time
-import winreg
 import zipfile
 from functools import partial
 from pathlib import Path
 from typing import Callable
 from typing import Literal
 from typing import overload
+
+if platform.system() == "Windows":
+    import winreg
+
+    _key = r"SOFTWARE\BOBuildSystem"
 
 import httpx
 import tqdm
@@ -450,6 +454,32 @@ async def do_get_steamguard_code(
     return code
 
 
+def winreg_load_used_code():
+    global _USED_CODE
+    hkey: winreg.HKEYType | None = None
+    try:
+        hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _key)
+        _USED_CODE = winreg.QueryValueEx(hkey, "UsedCode")[0]
+    except FileNotFoundError:
+        pass
+    finally:
+        if hkey is not None:
+            hkey.Close()
+
+
+def winreg_store_used_code():
+    try:
+        access = winreg.KEY_READ | winreg.KEY_SET_VALUE
+        hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, _key, access=access)
+    except FileNotFoundError:
+        hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, _key)
+    try:
+        winreg.SetValueEx(hkey, "UsedCode", 0, winreg.REG_SZ, code)
+    finally:
+        if hkey is not None:
+            hkey.Close()
+
+
 async def get_steamguard_code(
         steamguard_cli_path: Path,
         passkey: str,
@@ -460,17 +490,8 @@ async def get_steamguard_code(
     # return the same code more than once.
     global _USED_CODE
 
-    key = r"SOFTWARE\BOBuildSystem"
-
-    hkey: winreg.HKEYType | None = None
-    try:
-        hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key)
-        _USED_CODE = winreg.QueryValueEx(hkey, "UsedCode")[0]
-    except FileNotFoundError:
-        pass
-    finally:
-        if hkey is not None:
-            hkey.Close()
+    if platform.system() == "Windows":
+        winreg_load_used_code()
 
     code: str | None = None
     try:
@@ -483,16 +504,8 @@ async def get_steamguard_code(
     finally:
         if code is not None:
             _USED_CODE = code
-            try:
-                access = winreg.KEY_READ | winreg.KEY_SET_VALUE
-                hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, key, access=access)
-            except FileNotFoundError:
-                hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key)
-            try:
-                winreg.SetValueEx(hkey, "UsedCode", 0, winreg.REG_SZ, code)
-            finally:
-                if hkey is not None:
-                    hkey.Close()
+            if platform.system() == "Windows":
+                winreg_store_used_code()
 
 
 async def install_rs2(
