@@ -467,7 +467,8 @@ async def get_steamguard_code(
         if code is not None:
             _USED_CODE = code
             try:
-                hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, key)
+                access = winreg.KEY_READ | winreg.KEY_SET_VALUE
+                hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, key, access=access)
             except FileNotFoundError:
                 hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key)
             try:
