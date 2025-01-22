@@ -33,6 +33,8 @@ import orjson
 import psutil
 import servicemanager
 import vdf
+import win32api
+import win32con
 import win32service
 import win32serviceutil
 
@@ -41,6 +43,7 @@ from bobuild.config import RS2Config
 from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
 from bobuild.log import stdout_handler_id
+from bobuild.multiconfig import MultiConfigParser
 from bobuild.utils import asyncio_run
 from bobuild.utils import get_var
 from bobuild.workshop import WorkshopManifest
@@ -346,6 +349,24 @@ def read_manifest(
     # TODO: do we read
     # manifest_dir = rs2_cfg.server_workshop_dir
     # return WorkshopManifest()
+
+
+def ensure_server_config(
+        rs2_cfg: RS2Config,
+):
+    web = rs2_cfg.server_install_dir / "ROGame/Config/ROWeb.ini"
+    # engine = rs2_cfg.server_install_dir / "ROGame/Config/ROEngine.ini"
+    # game = rs2_cfg.server_install_dir / "ROGame/Config/ROGame.ini"
+
+    attrs: int = win32api.GetFileAttributes(str(web))
+    win32api.SetFileAttributes(str(web), attrs & ~win32con.FILE_ATTRIBUTE_READONLY)
+    web_cfg = MultiConfigParser()
+    web_cfg.read(web)
+    web_cfg["IpDrv.WebServer"]["bEnabled"] = "true"
+    web_cfg["IpDrv.WebServer"]["ListenPort"] = "8080"
+    with web.open("w") as f:
+        web_cfg.write(f, space_around_delimiters=True)
+    win32api.SetFileAttributes(str(web), attrs | win32con.FILE_ATTRIBUTE_READONLY)
 
 
 async def terminate_many(pids: list[int]):
