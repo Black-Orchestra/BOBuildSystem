@@ -91,12 +91,12 @@ async def run_cmd(
         )
 
         if redact is None:
-            def redact(x: str) -> str:
-                return x
+            def redact(plaintext: str) -> str:
+                return plaintext
 
         logger.info(
             "running SteamCMD command: '{}'",
-            [redact(plaintext=x)
+            [redact(plaintext=x)  # type: ignore[call-arg]
              for x in [utils_redact(steamguard_code, plaintext=arg)
                        for arg in steamcmd_args]],
         )
@@ -136,6 +136,7 @@ async def run_cmd(
             if return_output:
                 _lines.append(_line)
 
+        # TODO: we need to run redact on these too?
         await asyncio.gather(
             read_stream_task(proc.stdout, partial(line_cb, all_out, "SteamCMD stdout")),
             read_stream_task(proc.stderr, partial(line_cb, all_err, "SteamCMD stderr")),
