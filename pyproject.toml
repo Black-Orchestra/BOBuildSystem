@@ -51,7 +51,10 @@ dev = [
     "hatch",
     "mypy",
     "ruff",
-
+    "types-psutil",
+    "types-pywin32",
+    "types-tqdm",
+    "types-ujson",
 ]
 
 [tool.hatch.version]
