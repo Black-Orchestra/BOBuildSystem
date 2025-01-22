@@ -365,6 +365,7 @@ async def workshop_build_item_many(
         *args,
         raise_on_error=True,
         steamguard_code=steamguard_code,
+        redact=partial(utils_redact, password),
     )
 
 
@@ -589,6 +590,7 @@ async def workshop_status(
         raise_on_error=True,
         return_output=True,
         steamguard_code=code,
+        redact=partial(utils_redact, password),
     )
 
     # Local workshop items for App 418460:
@@ -624,6 +626,7 @@ async def download_workshop_item(
         "+quit",
         raise_on_error=True,
         steamguard_code=code,
+        redact=partial(utils_redact, password),
     )
 
 
