@@ -11,6 +11,7 @@ from typing import Callable
 from typing import Coroutine
 from typing import IO
 from typing import Literal
+from typing import Protocol
 from typing import TypeVar
 from typing import overload
 from typing import override
@@ -193,6 +194,11 @@ async def wait_for(
         return default
 
 
+class RedactProtocol(Protocol):
+    def __call__(self, plaintext: str) -> str:
+        ...
+
+
 @overload
 async def run_process(
         program: Path | str,
@@ -200,7 +206,7 @@ async def run_process(
         cwd: Path | None = None,
         raise_on_error: bool = False,
         return_output: Literal[True] = ...,
-        redact: Callable[[str], str] | None = None,
+        redact: RedactProtocol | None = None,
         stop_event: asyncio.Event | None = None,
         buffer_lines: bool = False,
         stdout_callback: Callable[[str], str] | None = None,
@@ -215,7 +221,7 @@ async def run_process(
         cwd: Path | None = None,
         raise_on_error: bool = False,
         return_output: Literal[False] = ...,
-        redact: Callable[[str], str] | None = None,
+        redact: RedactProtocol | None = None,
         stop_event: asyncio.Event | None = None,
         buffer_lines: bool = False,
         stdout_callback: Callable[[str], str] | None = None,
@@ -229,7 +235,7 @@ async def run_process(
         cwd: Path | None = None,
         raise_on_error: bool = False,
         return_output: bool = False,
-        redact: Callable[[str], str] | None = None,
+        redact: RedactProtocol | None = None,
         stop_event: asyncio.Event | None = None,
         buffer_lines: bool = False,
         stdout_callback: Callable[[str], str] | None = None,
@@ -238,7 +244,7 @@ async def run_process(
         logger.info(
             "running program {}: {}, cwd={}",
             program,
-            [redact(x) for x in args],
+            [redact(plaintext=x) for x in args],
             cwd,
         )
     else:
