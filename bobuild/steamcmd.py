@@ -96,8 +96,9 @@ async def run_cmd(
 
         logger.info(
             "running SteamCMD command: '{}'",
-            [redact(x) for x in [utils_redact(steamguard_code, plaintext=arg)
-                                 for arg in steamcmd_args]]
+            [redact(plaintext=x)
+             for x in [utils_redact(steamguard_code, plaintext=arg)
+                       for arg in steamcmd_args]],
         )
     else:
         logger.info("running SteamCMD command: '{}'", steamcmd_args)
