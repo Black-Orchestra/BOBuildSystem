@@ -280,8 +280,7 @@ async def run_process(
 
         if stdout_callback is not None:
             def out_cb(_lines: list[str], _name: str, _line: str):
-                _line = stdout_callback(_line)
-                logger.info("{}: {}", _name, _line)
+                logger.info("{}: {}", _name, stdout_callback(_line))
                 if return_output:
                     _lines.append(_line)
         else:
