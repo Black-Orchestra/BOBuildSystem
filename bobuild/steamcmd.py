@@ -467,11 +467,11 @@ async def get_steamguard_code(
         if code is not None:
             _USED_CODE = code
             try:
-                hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key)
+                hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, key)
             except FileNotFoundError:
                 hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key)
             try:
-                winreg.SetValueEx(hkey, "UsedCode", None, winreg.REG_SZ, code)
+                winreg.SetValueEx(hkey, "UsedCode", 0, winreg.REG_SZ, code)
             finally:
                 if hkey is not None:
                     hkey.Close()
