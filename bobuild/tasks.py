@@ -21,7 +21,7 @@ from taskiq import TaskiqState
 from taskiq.schedule_sources import LabelScheduleSource
 from taskiq.serializers import ORJSONSerializer
 from taskiq_pg import AsyncpgResultBackend
-from taskiq_redis import ListQueueBroker
+from taskiq_redis import PubSubBroker
 from typing_extensions import override
 
 from bobuild.bo_discord import send_webhook
@@ -224,7 +224,7 @@ else:
             serializer=ORJSONSerializer(),
         )
 
-    broker = ListQueueBroker(
+    broker = PubSubBroker(
         url=REDIS_URL,
     ).with_serializer(
         ORJSONSerializer()
