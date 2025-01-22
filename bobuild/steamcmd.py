@@ -620,7 +620,7 @@ async def workshop_status(
         if start in line.lower():
             in_block = True
         elif in_block:
-            if line.startswith("Workshop Content folder"):
+            if line.startswith(" Workshop Content folder"):
                 pass  # TODO: do something with this line?
             elif line.startswith("- "):
                 parts = line.split(" ")
