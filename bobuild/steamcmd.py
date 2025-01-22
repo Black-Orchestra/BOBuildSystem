@@ -516,6 +516,9 @@ async def workshop_status(
         steamcmd_config.steamguard_cli_path,
         steamcmd_config.steamguard_passkey,
     )
+    # NOTE: downloading non-existent item with ID 1 is used to
+    # force SteamCMD to "refresh" its Workshop data. Otherwise,
+    # it will not detect already downloaded items!
     _, out, _ = await run_cmd(
         steamcmd_config.exe_path,
         "+force_install_dir",
@@ -523,6 +526,9 @@ async def workshop_status(
         "+login",
         username,
         password,
+        "+workshop_download_item",
+        str(RS2_APPID),
+        "1",
         "+workshop_status",
         str(RS2_APPID),
         "+logoff",
