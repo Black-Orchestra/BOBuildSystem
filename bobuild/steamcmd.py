@@ -474,7 +474,7 @@ def winreg_store_used_code():
     except FileNotFoundError:
         hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, _key)
     try:
-        winreg.SetValueEx(hkey, "UsedCode", 0, winreg.REG_SZ, code)
+        winreg.SetValueEx(hkey, "UsedCode", 0, winreg.REG_SZ, _USED_CODE)
     finally:
         if hkey is not None:
             hkey.Close()
@@ -612,7 +612,6 @@ async def workshop_status(
     # Workshop Content folder : "c:\rs2server\steamapps\workshop" - no update needed
     # - Item 3410909233 : installed (61294472 bytes, Mon Jan 20 12:19:31 2025),
 
-    # TODO:
     return out.split("\n")
 
 
