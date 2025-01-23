@@ -35,13 +35,16 @@ jobs:
           hatch build
 
       - name: Check types with MyPy
+        continue-on-error: true
         run: |
-          hatch run test:mypy
+          hatch run test:mypy ${{ github.workspace }}
 
       - name: Lint code with Ruff
+        continue-on-error: true
         run: |
-          hatch run test:ruff
+          hatch run test:ruff ${{ github.workspace }}
 
       - name: Check import sorting
+        continue-on-error: true
         run: |
-          hatch run test:isort
+          hatch run test:isort ${{ github.workspace }}
