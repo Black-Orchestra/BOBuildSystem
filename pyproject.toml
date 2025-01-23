@@ -49,6 +49,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "hatch",
+    "isort",
     "mypy",
     "ruff",
     "types-psutil",
@@ -65,3 +66,30 @@ version-file = "bobuild/_version.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.hatch.envs.test]
+dependencies = [
+    "hatch",
+    "isort",
+    "mypy",
+    "ruff",
+    "types-psutil",
+    "types-pywin32",
+    "types-tqdm",
+    "types-ujson",
+]
+
+[tool.hatch.envs.test.scripts]
+run_mypy = "mypy . --show-error-codes"
+run_ruff = "ruff check ."
+run_isort = "isort --check-only ."
+
+[tool.isort]
+case_sensitive = true
+force_single_line = true
+group_by_package = true
+lexicographical = false
+order_by_type = false
+extend_skip = [
+    "_version.py"
+]
