@@ -252,6 +252,14 @@ class RS2Config:
     def server_cache_dir(self) -> Path:
         return self.server_install_dir / "ROGame/Cache/"
 
+    @cachedproperty
+    def server_admin_password(self) -> str:
+        return get_var("BO_RS2_SERVER_ADMIN_PASSWORD")
+
+    @cachedproperty
+    def server_admin_username(self) -> str:
+        return "Admin"
+
 
 @dataclass(frozen=True)
 class DiscordConfig:

@@ -22,7 +22,7 @@ async def test_builds_webhook(cfg: DiscordConfig):
         embed_title="Build start test message!",
         embed_description="This is a test message!",
         embed_color=discord.Color.light_embed(),
-        embed_timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
+        embed_timestamp=utcnow(),
     )
 
 

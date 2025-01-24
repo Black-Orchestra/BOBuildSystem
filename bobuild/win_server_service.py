@@ -22,30 +22,40 @@ import argparse
 import asyncio
 import contextlib
 import os
-import re
+import random
 import shutil
 import sys
 import threading
 import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import TypeVar
 
+import discord
 import orjson
 import psutil
 import servicemanager
-import vdf
 import win32api
 import win32con
 import win32service
 import win32serviceutil
 
+from bobuild.bo_discord import send_webhook
 from bobuild.config import DiscordConfig
 from bobuild.config import RS2Config
 from bobuild.config import SteamCmdConfig
 from bobuild.log import logger
 from bobuild.log import stdout_handler_id
 from bobuild.multiconfig import MultiConfigParser
+from bobuild.steamcmd import RS2_APPID
+from bobuild.steamcmd import download_workshop_item_many
+from bobuild.steamcmd import install_validate_app
+from bobuild.steamcmd import workshop_status
 from bobuild.utils import asyncio_run
 from bobuild.utils import get_var
+from bobuild.utils import utcnow
+from bobuild.webadmin import WebAdmin
 from bobuild.workshop import WorkshopManifest
 
 STOP_EVENT = asyncio.Event()
@@ -142,7 +152,7 @@ class BOWinServerService(win32serviceutil.ServiceFramework):
         BOWinServerService.discord_config = DiscordConfig()
 
         self.status = win32service.SERVICE_RUNNING
-        asyncio_run(main_task(
+        asyncio_run(wrap_main_task(
             BOWinServerService.rs2_config,
             BOWinServerService.steamcmd_config,
             BOWinServerService.discord_config,
@@ -234,113 +244,6 @@ async def terminate_server(
             pass
 
 
-async def steamcmd_update(
-        steamcmd_install_script_path: Path,
-        steamcmd_update_script_path: Path,
-        branch: str,
-        pidfile_path: Path,
-        server_proc: psutil.Process | None,
-):
-    needs_update = False
-    build_id: int | None = None
-    branch = branch.lower()
-
-    check_update_proc = await asyncio.create_subprocess_exec(
-        "powershell.exe",
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        str(steamcmd_update_script_path),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    ec = await check_update_proc.wait()
-    if ec != 0:
-        log_warning(f"SteamCMD exited with code: {ec}")
-    out = (await check_update_proc.stdout.read()).decode(encoding="utf-8", errors="replace")
-    out += (await check_update_proc.stderr.read()).decode(encoding="utf-8", errors="replace")
-
-    install_state_found = False
-
-    lines = out.split("\n")
-    for i, line in enumerate(lines):
-        log_info(f"SteamCMD output: [line {i}]: {line}")
-        line = line.strip()
-        # E.g.:
-        #  - install state: Fully Installed,
-        #  - install state: Fully Installed,Update Required,
-        if "install state:" in line:
-            install_state_found = True
-            states_str = line.split(":")[1]
-            states = [
-                state.strip()
-                for state in states_str.split(",")
-                if state
-            ]
-            for state in states:
-                if state == "Update Required":
-                    needs_update = True
-                    break
-        # - size on disk: 13978936396 bytes, BuildID 16715839
-        elif "size on disk:" in line:
-            build_id = int(line.split("BuildID")[-1].strip())
-            log_info(f"current BuildID: {build_id}")
-
-    if not install_state_found:
-        log_warning("'install state:' line not found in steamcmd output")
-
-    if not build_id:
-        log_warning("cannot determine BuildID from SteamCMD output")
-
-    # Install state is not reliable, check app_info_print output too.
-    if not needs_update and build_id:
-        pattern = re.compile(r".*(\"1457890\"[\r\n]+{.*}).*", flags=re.DOTALL)
-        if match := pattern.match(out):
-            try:
-                data = vdf.loads(match.group(1))
-                latest_build_id = int(data["1457890"]["depots"]["branches"][branch]["buildid"])
-                log_info(f"latest BuildID: {latest_build_id}")
-                if latest_build_id != build_id:
-                    needs_update = True
-            except Exception as e:
-                log_error(f"error parsing VDF: {type(e).__name__}: {e}")
-        else:
-            log_warning(f"{pattern} does not match output")
-
-    log_info(f"BO server needs_update={needs_update}")
-
-    if not needs_update:
-        return
-
-    # Shut down BO server if it's running.
-    if server_proc is not None:
-        log_info(f"terminating running server process: {server_proc}")
-        try:
-            pids = read_pids(pidfile_path)
-            await terminate_many(pids)
-            await terminate_server(server_proc)
-        except psutil.Error as e:
-            log_warning(f"{type(e).__name__}: {e}")
-    else:
-        log_info("no server process running, no need to terminate")
-
-    log_info("running SteamCMD update script")
-    steamcmd_proc = await asyncio.create_subprocess_exec(
-        "powershell.exe",
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        str(steamcmd_install_script_path),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    ec = await steamcmd_proc.wait()
-    out = (await steamcmd_proc.stdout.read()).decode(encoding="utf-8", errors="replace")
-    out += (await steamcmd_proc.stderr.read()).decode(encoding="utf-8", errors="replace")
-    out_lines = out.split("\n")
-    for i, line in enumerate(out_lines):
-        log_info(f"SteamCMD output: [line {i}]: {line}")
-    log_info(f"{steamcmd_proc} exited with code: {ec}")
-
-
 def read_manifest(
         rs2_cfg: RS2Config,
         # item_id: id,
@@ -351,13 +254,125 @@ def read_manifest(
     # return WorkshopManifest()
 
 
+def make_bo_map_cycles(rs2_config: RS2Config, round_limit: int = 2) -> list[str]:
+    map_names = list(rs2_config.bo_dev_beta_map_ids)
+    random.shuffle(map_names)
+    maps_str = ",".join(f'"{x}"' for x in map_names)
+    limits = (f"{round_limit}," * len(map_names)).rstrip(",")
+    map_cycle_str = f'(Maps=({maps_str}),RoundLimits=({limits}))'
+    return [map_cycle_str]
+
+
+T = TypeVar("T")
+
+
+def ensure_list_contains(lst: list[T], *args: T) -> list[T]:
+    for item in args:
+        if item not in lst:
+            lst.append(item)
+    return lst
+
+
 def ensure_server_config(
         rs2_cfg: RS2Config,
 ):
     web = rs2_cfg.server_install_dir / "ROGame/Config/ROWeb.ini"
-    # engine = rs2_cfg.server_install_dir / "ROGame/Config/ROEngine.ini"
-    # game = rs2_cfg.server_install_dir / "ROGame/Config/ROGame.ini"
+    engine = rs2_cfg.server_install_dir / "ROGame/Config/ROEngine.ini"
+    game = rs2_cfg.server_install_dir / "ROGame/Config/ROGame.ini"
+    webadmin = rs2_cfg.server_install_dir / "ROGame/Config/ROWebAdmin.ini"
+    # memberdb = rs2_cfg.server_install_dir / "ROGame/Config/ROMemberDb.ini"
 
+    # ########################################################################
+    # ROGame.ini
+    # ########################################################################
+
+    game_cfg = MultiConfigParser()
+    game_cfg.read(game)
+    game_cfg["Engine.GameReplicationInfo"]["ShortName"] = "BOServer"
+    game_cfg["Engine.GameReplicationInfo"]["ServerName"] = "Black Orchestra Dev Server"
+    game_cfg["ROGame.ROGameReplicationInfo"]["bLogVoting"] = "True"
+    game_cfg["ROGame.ROGameInfo"]["AdminContact"] = "https://www.blackorchestra.net"
+    game_cfg["ROGame.ROGameInfo"]["bEnableMapVoting"] = "True"
+    game_cfg["ROGame.ROGameInfo"]["MapRepeatLimit"] = "3"
+    game_cfg["ROGame.ROGameInfo"]["ClanMotto"] = "Black Orchestra Dev Server"
+    game_cfg["ROGame.ROGameInfo"]["ServerMOTD"] = "Welcome to the Black Orchestra development test server!"
+    game_cfg["ROGame.ROGameInfo"]["WebLink"] = "https://www.blackorchestra.net"
+    game_cfg["ROGame.ROGameInfo"]["WebLinkColor"] = "(B=0,G=0,R=255,A=255)"
+    game_cfg["ROGame.ROGameInfo"]["BannerLink"] = "TODO"
+    game_cfg["Engine.GameInfo"]["MaxPlayers"] = "64"
+    game_cfg["Engine.AccessControl"]["AdminPassword"] = rs2_cfg.server_admin_password
+    game_cfg["Engine.AccessControl"]["GamePassword"] = "boserverpassword"  # TODO: generate new one for each build?
+    game_cfg["Engine.AccessControl"]["IPPolicies"] = "ACCEPT;*"
+    game_cfg["ROGame.ROMembers"]["bBroadcastWelcomeMembers"] = "True"
+    game_cfg["ROGame.ROMembers"]["bAutoSignInAdmins"] = "True"
+    game_cfg["ROGame.ROMembers"]["bAdminsSupersedeNormalMembers"] = "True"
+    game_cfg["ROGame.ROMembers"]["bRestrictAdminLoginToMembersOnly"] = "True"
+    game_cfg["ROGame.ROTracking"]["DeleteTrackRecordsOlderThan"] = "0"
+    game_cfg["ROGame.ROTracking"]["DeleteTrackRecordsIfNotSeenAfter"] = "0"
+
+    map_cycles = make_bo_map_cycles(rs2_cfg)
+    game_cfg["ROGame.ROGameInfo"]["GameMapCycles"] = "\n".join(map_cycles)
+    game_cfg["ROGame.ROGameInfo"]["ActiveMapCycle"] = "0"
+
+    with game.open("w") as f:
+        game_cfg.write(f, space_around_delimiters=False)
+
+    # ########################################################################
+    # ROEngine.ini
+    # ########################################################################
+
+    engine_cfg = MultiConfigParser()
+    engine_cfg.read(engine)
+
+    engine_cfg["URL"]["GameName"] = "Black Orchestra"
+    engine_cfg["LogFiles"]["PurgeLogsDays"] = "365"
+
+    tw_sws_key = "OnlineSubsystemSteamworks.TWWorkshopSteamworks"
+    if tw_sws_key not in engine_cfg:
+        engine_cfg[tw_sws_key] = {}
+    item_ids = engine_cfg[tw_sws_key].getlist("ServerSubscribedWorkshopItems") or []
+    item_ids = ensure_list_contains(
+        item_ids,
+        *(
+            rs2_cfg.bo_dev_beta_workshop_id,
+            *rs2_cfg.bo_dev_beta_map_ids.keys(),
+        ),
+    )
+    engine_cfg[tw_sws_key]["ServerSubscribedWorkshopItems"] = "\n".join(sorted(item_ids))
+
+    dl_mgrs = [
+        "OnlineSubsystemSteamworks.TWWorkshopSteamworks",
+        "OnlineSubsystemSteamworks.SteamWorkshopDownload",
+        "IpDrv.HTTPDownload",
+    ]
+    engine_cfg["IpDrv.TcpNetDriver"]["DownloadManagers"] = "\n".join(dl_mgrs)
+    engine_cfg["IpDrv.TcpNetDriver"]["NetServerMaxTickRate"] = "35"  # TODO: see how CPU handles this!
+
+    suppressions = engine_cfg["Core.System"].getlist("Suppress") or []
+    if "DevBalanceStats" in suppressions:
+        suppressions.remove("DevBalanceStats")
+    if "DevOnlineWorkshop" in suppressions:
+        suppressions.remove("DevOnlineWorkshop")
+    if "Init" in suppressions:
+        suppressions.remove("Init")
+    if "GameStats" in suppressions:
+        suppressions.remove("GameStats")
+    if "DevShaders" in suppressions:
+        suppressions.remove("DevShaders")
+    if "DevConfig" in suppressions:
+        suppressions.remove("DevConfig")
+    engine_cfg["Core.System"]["Suppress"] = "\n".join(suppressions)
+
+    with engine.open("w") as f:
+        engine_cfg.write(f, space_around_delimiters=False)
+
+    # ########################################################################
+    # ROWeb.ini
+    # ########################################################################
+
+    # Keep ROWeb.ini read-only outside these modifications due to
+    # daylight saving resetting some RS2 configs to defaults, which
+    # leads to WebAdmin being disabled after the server starts up.
     attrs: int = win32api.GetFileAttributes(str(web))
     win32api.SetFileAttributes(str(web), attrs & ~win32con.FILE_ATTRIBUTE_READONLY)
     web_cfg = MultiConfigParser()
@@ -365,8 +380,37 @@ def ensure_server_config(
     web_cfg["IpDrv.WebServer"]["bEnabled"] = "true"
     web_cfg["IpDrv.WebServer"]["ListenPort"] = "8080"
     with web.open("w") as f:
-        web_cfg.write(f, space_around_delimiters=True)
+        web_cfg.write(f, space_around_delimiters=False)
     win32api.SetFileAttributes(str(web), attrs | win32con.FILE_ATTRIBUTE_READONLY)
+
+    # ########################################################################
+    # ROWebAdmin.ini
+    # ########################################################################
+
+    wa_cfg = MultiConfigParser()
+    wa_cfg.read(webadmin)
+    wa_cfg["WebAdmin.WebAdmin"]["bChatLog"] = "True"
+    wa_cfg["WebAdmin.WebAdmin"]["AuthenticationClass"] = "WebAdmin.MultiWebAdminAuth"
+    wa_cfg["WebAdmin.Chatlog"]["bUnique"] = "True"
+    wa_cfg["WebAdmin.Chatlog"]["bIncludeTimeStamp"] = "True"
+    with webadmin.open("w") as f:
+        wa_cfg.write(f, space_around_delimiters=False)
+
+    # ########################################################################
+    # ROMemberDb.ini
+    # ########################################################################
+
+    # TODO: DO WE WANT TO MANAGE THIS AUTOMATICALLY?
+    # member_cfg = MultiConfigParser()
+    # member_cfg.read(memberdb)
+    # members = member_cfg["ROGame.MemberDb"].getlist("Table_Members") or []
+    # members = ensure_list_contains(
+    #     members,
+    #     "",
+    # )
+    # member_cfg["ROGame.MemberDb"]["Table_Members"] = "\n".join(members)
+    # with memberdb.open("w") as f:
+    #     member_cfg.write(f, space_around_delimiters=False)
 
 
 async def terminate_many(pids: list[int]):
@@ -399,6 +443,96 @@ async def is_running(proc: asyncio.subprocess.Process) -> bool:
     return proc.returncode is None
 
 
+async def wrap_main_task(
+        service: BOWinServerService,
+        rs2_config: RS2Config,
+        steamcmd_config: SteamCmdConfig,
+        discord_config: DiscordConfig,
+):
+    try:
+        await main_task(
+            service=service,
+            rs2_config=rs2_config,
+            steamcmd_config=steamcmd_config,
+            discord_config=discord_config,
+        )
+    except (Exception, asyncio.CancelledError) as e:
+        try:
+            service.log_error(f"main_task error: {type(e).__name__}: {e}")
+            desc = f"```\n{traceback.format_exc()}```"
+            await send_webhook(
+                url=discord_config.server_service_webhook_url,
+                embed_title="Error Running BO Server! :loudspeaker:",
+                embed_description=desc,
+                embed_color=discord.Color.dark_red(),
+                embed_timestamp=utcnow(),
+                embed_footer="Black Orchestra Dedicated Server",
+            )
+        except (Exception, asyncio.CancelledError):
+            pass
+        finally:
+            raise
+    finally:
+        # TODO: what were we supposed to do here?
+        #  Ensure processes cleaned up?
+        raise
+
+
+async def notify_shutdown(
+        discord_config: DiscordConfig,
+        embed_title: str,
+        embed_footer: str,
+        message: str,
+        web_admin: WebAdmin,
+):
+    await send_webhook(
+        url=discord_config.server_service_webhook_url,
+        embed_title=embed_title,
+        embed_description=message,
+        embed_color=discord.Color.blue(),
+        embed_timestamp=utcnow(),
+        embed_footer=embed_footer,
+    )
+    for x in range(10):
+        await web_admin.send_message(message)
+        await asyncio.sleep(0.1)
+
+
+def install_workshop_content(
+        service: BOWinServerService,
+        content_dir: Path,
+        cache_dir: Path,
+        item_ids: list[int],
+):
+    service.log_info(
+        f"installing workshop content, content_dir='{content_dir}', "
+        f"cache_dir='{cache_dir}'"
+    )
+    item_dirs = (d for d in content_dir.iterdir() if d.is_dir())
+    for item_dir in item_dirs:
+        try:
+            item_id = int(item_dir.name)
+        except ValueError as e:
+            service.log_warning(
+                "invalid workshop content directory: "
+                f"'{item_dir}': cannot convert dir name to ID: {e}")
+            continue
+        if item_id not in item_ids:
+            service.log_info(
+                f"found item {item_id} in content dir, but it is not found in"
+                "list of item IDS to install, skipping")
+            continue
+
+        service.log_info(f"installing item: {item_id}")
+        inis = item_dir.glob("*.ini")
+        # TODO: need to update this if we get more localization languages!
+        ints = item_dir.glob("*.int")
+
+        workers = max((os.cpu_count() - 2), 1)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            pass
+
+
 async def main_task(
         service: BOWinServerService,
         rs2_config: RS2Config,
@@ -406,6 +540,9 @@ async def main_task(
         discord_config: DiscordConfig,
 ) -> None:
     global ASYNC_MAIN_DONE_EVENT
+
+    embed_title = "BO Server Status Update! :mega:"
+    embed_footer = "BO Dedicated Server"
 
     workshop_items: list[int] = [rs2_config.bo_dev_beta_workshop_id]
     workshop_items += list(rs2_config.bo_dev_beta_map_ids.values())
@@ -429,55 +566,162 @@ async def main_task(
 
     pidfile_path.unlink(missing_ok=True)
 
+    # TODO: is it enough to download the binaries here? Do we need to
+    #   check their state regularly?
+    service.log_info("installing Steamworks SDK Redist")
+    await install_validate_app(
+        steamcmd_config.exe_path,
+        install_dir=rs2_config.server_install_dir / "Binaries/Win64",
+        app_id=1007,  # Steamworks SDK Redist.
+        username="anonymous",
+        password="",
+    )
+
+    all_item_ids = [rs2_config.bo_dev_beta_workshop_id] + list(
+        rs2_config.bo_dev_beta_map_ids.values()
+    )
+    service.log_info(f"total SWS items: {len(all_item_ids)}")
+
+    service.log_info("setting up WebAdmin client")
+    wa = WebAdmin(
+        username=rs2_config.server_admin_username,
+        password=rs2_config.server_admin_password,
+        url="http://100.100.72.124:8080",  # TODO: put this in config?
+    )
+
+    service.log_info("entering main service loop")
     while not await asyncio.wait_for(STOP_EVENT.wait(), timeout=1.0):
         if time.time() > (update_check_interval + update_check_time):
             service.log_info("checking for BO Steam Workshop updates")
-            # await steamcmd_update(
-            #     steamcmd_install_script_path,
-            #     steamcmd_update_script_path,
-            #     branch,
-            #     pidfile_path,
-            #     s_proc_handle,
-            # )
+
+            sws_status = await workshop_status(
+                steamcmd_config.exe_path,
+                download_dir=rs2_config.server_workshop_dir,
+                username=steamcmd_config.username,
+                password=steamcmd_config.password,
+            )
+            service.log_info(f"workshop status: {sws_status}")
+
+            items_needing_update = [
+                status[0] for status in sws_status
+                if status[1] != "installed"
+            ]
+            installed_ids = [status[0] for status in sws_status]
+            for item_id in all_item_ids:
+                if item_id not in installed_ids:
+                    service.log_info(f"SWS item {item_id} is not installed")
+                    items_needing_update.append(item_id)
+
+            if items_needing_update:
+                service.log_info(f"items needing update/install: {items_needing_update}")
+                desc = ("Updating/installing the following Workshop items: "
+                        f"{", ".join(str(x) for x in items_needing_update)}")
+                await send_webhook(
+                    url=discord_config.server_service_webhook_url,
+                    embed_title=embed_title,
+                    embed_description=desc,
+                    embed_color=discord.Color.blue(),
+                    embed_timestamp=utcnow(),
+                    embed_footer=embed_footer,
+                )
+
+                await download_workshop_item_many(
+                    steamcmd_config.exe_path,
+                    download_dir=rs2_config.server_workshop_dir,
+                    workshop_item_ids=items_needing_update,
+                    username=steamcmd_config.username,
+                    password=steamcmd_config.password,
+                )
+
+                # Shut down BO server if it's running.
+                if server_proc is not None:
+                    service.log_info(f"terminating running server process: {server_proc}")
+                    await notify_shutdown(
+                        discord_config,
+                        embed_title=embed_title,
+                        embed_footer=embed_footer,
+                        message="Shutting down BO server for updates.",
+                        web_admin=wa,
+                    )
+                    await asyncio.sleep(2.0)  # Small grace period.
+                    try:
+                        pids = read_pids(pidfile_path)
+                        await terminate_many(pids)
+                        await terminate_server(server_proc)
+                    except psutil.Error as e:
+                        service.log_warning(f"{type(e).__name__}: {e}")
+                else:
+                    service.log_info("no server process running, no need to terminate")
+
+                content_dir = rs2_config.server_workshop_dir / f"content/{RS2_APPID}/"
+                cache_dir = rs2_config.server_cache_dir
+                install_workshop_content(
+                    service=service,
+                    content_dir=content_dir,
+                    cache_dir=cache_dir,
+                    item_ids=workshop_items,
+                )
+
+                await send_webhook(
+                    url=discord_config.server_service_webhook_url,
+                    embed_title=embed_title,
+                    embed_description="Done updating Workshop items.",
+                    embed_color=discord.Color.blue(),
+                    embed_timestamp=utcnow(),
+                    embed_footer=embed_footer,
+                )
+
             update_check_time = time.time()
 
-            if not server_proc:
-                #         log_info("running server start script")
-                #         changelist = read_changelist(build_id_file_path)
-                #         full_server_name = f"{server_name} {changelist}"
-                #         server_proc = await asyncio.create_subprocess_exec(
-                #             "powershell.exe",
-                #             "-NoProfile",
-                #             "-ExecutionPolicy", "Bypass",
-                #             str(script_path),
-                #             *(
-                #                 f"-ServerName \"{full_server_name}\"",
-                #                 f"-Branch \"{branch}\"",
-                #                 f"-Port \"{port}\"",
-                #                 f"-QueryPort \"{query_port}\"",
-                #             ),
-                #             stderr=asyncio.subprocess.STDOUT,
-                #         )
-                #         # Wait a bit to let it start all children.
-                #         await asyncio.sleep(1.0)
-                #
-                # This isn't necessarily reliable, but better than nothing.
-                s_proc_handle = psutil.Process(server_proc.pid)
-                pids = [
-                    str(child.pid)
-                    for child in s_proc_handle.children()
-                ]
-                pids.append(str(s_proc_handle.pid))
-                pids_str = "\n".join(pids)
-                pidfile_path.write_text(pids_str)
+        if not server_proc:
+            service.log_info("server is not running, starting it")
+            await send_webhook(
+                url=discord_config.server_service_webhook_url,
+                embed_title=embed_title,
+                embed_description="Starting BO server.",
+                embed_color=discord.Color.blue(),
+                embed_timestamp=utcnow(),
+                embed_footer=embed_footer,
+            )
+
+            # log_info("running server start script")
+            # changelist = read_changelist(build_id_file_path)
+            # full_server_name = f"{server_name} {changelist}"
+            # server_proc = await asyncio.create_subprocess_exec(
+            #     "powershell.exe",
+            #     "-NoProfile",
+            #     "-ExecutionPolicy", "Bypass",
+            #     str(script_path),
+            #     *(
+            #         f"-ServerName \"{full_server_name}\"",
+            #         f"-Branch \"{branch}\"",
+            #         f"-Port \"{port}\"",
+            #         f"-QueryPort \"{query_port}\"",
+            #     ),
+            #     stderr=asyncio.subprocess.STDOUT,
+            # )
+            # Wait a bit to let it start up fully.
+            # TODO: is this stupid?
+            await asyncio.sleep(1.0)
+
+            # This isn't necessarily reliable, but better than nothing.
+            s_proc_handle = psutil.Process(server_proc.pid)
+            pids = [
+                str(child.pid)
+                for child in s_proc_handle.children()
+            ]
+            pids.append(str(s_proc_handle.pid))
+            pids_str = "\n".join(pids)
+            pidfile_path.write_text(pids_str)
 
         if server_proc and not STOP_EVENT.is_set():
             if not await is_running(server_proc):
-                ec = await server_proc.wait()
+                rc = server_proc.returncode
                 service.log_info(
-                    f"process {server_proc} exited with code: {ec}, "
+                    f"process {server_proc} exited with code: {rc}, "
                     f"needs to be restarted")
                 server_proc = None
+                await asyncio.sleep(3.0)
 
     if server_proc:
         await (await asyncio.create_subprocess_shell(

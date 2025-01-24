@@ -166,7 +166,10 @@ async def run_cmd(
 
 async def install_update_steamcmd():
     if platform.system() == "Windows":
-        await install_update_steamcmd_windows()
+        # TODO: do we still need this?
+        raise NotImplementedError
+        # await install_update_steamcmd_windows(
+        # )
     else:
         raise NotImplementedError("https://developer.valvesoftware.com/wiki/SteamCMD#Linux")
 
@@ -454,7 +457,7 @@ async def do_get_steamguard_code(
     return code
 
 
-def winreg_load_used_code():
+def winreg_load_used_code() -> None:
     global _USED_CODE
     hkey: winreg.HKEYType | None = None
     try:
@@ -467,7 +470,7 @@ def winreg_load_used_code():
             hkey.Close()
 
 
-def winreg_store_used_code():
+def winreg_store_used_code() -> None:
     try:
         access = winreg.KEY_READ | winreg.KEY_SET_VALUE
         hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, _key, access=access)
@@ -631,6 +634,39 @@ async def workshop_status(
                 in_block = False
 
     return statuses
+
+
+async def download_workshop_item_many(
+        steamcmd_config: SteamCmdConfig,
+        download_dir: Path,
+        workshop_item_ids: list[int],
+        username: str,
+        password: str,
+):
+    item_id_args: list[str] = []
+    for item_id in workshop_item_ids:
+        item_id_args.extend(
+            ("+workshop_download_item", str(RS2_APPID), str(item_id))
+        )
+
+    code = await get_steamguard_code(
+        steamcmd_config.steamguard_cli_path,
+        steamcmd_config.steamguard_passkey,
+    )
+    await run_cmd(
+        steamcmd_config.exe_path,
+        "+login",
+        username,
+        password,
+        "+force_install_dir",
+        str(download_dir.resolve()),
+        *item_id_args,
+        "+logoff",
+        "+quit",
+        raise_on_error=True,
+        steamguard_code=code,
+        redact=partial(utils_redact, password),
+    )
 
 
 async def download_workshop_item(
