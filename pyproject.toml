@@ -45,7 +45,7 @@ dependencies = [
     "ujson==5.10.0",
     "uvloop==0.21.0; platform_system != 'Windows'",
     "vdf==3.4",
-    "winloop==0.1.7; platform_system == 'Windows'",
+    "winloop==0.1.8; platform_system == 'Windows'",
 ]
 [project.optional-dependencies]
 dev = [
