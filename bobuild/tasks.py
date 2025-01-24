@@ -75,7 +75,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         try:
             lock = self.pool.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
             acquired = await lock.acquire(blocking=True, blocking_timeout=0.1)  # type: ignore[union-attr]
-            if not acquired:
+            if acquired:
                 # There is currently no task running, free to start a new one.
                 return
             else:
