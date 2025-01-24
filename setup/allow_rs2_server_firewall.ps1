@@ -55,3 +55,12 @@ if (!$Rule)
     -Action Allow -Protocol TCP -Profile Any -Description $Description -Enabled True `
     -RemotePort 8080
 }
+
+# TODO: for some reason this is also needed. The above rules are not enough?
+$Rule = Get-NetFirewallrule -DisplayName "RS2 Dedicated Server Inbound" -ErrorAction SilentlyContinue
+if (!$Rule)
+{
+    New-NetFirewallRule -DisplayName "RS2 Dedicated Server Inbound" `
+    -Direction Inbound -Program $RS2Path `
+    -Action Allow -Profile Any -Description $Description -Enabled True
+}
