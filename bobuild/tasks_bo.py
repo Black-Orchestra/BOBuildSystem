@@ -40,6 +40,7 @@ from bobuild.run import log_line_buffer
 from bobuild.steamcmd import get_steamguard_code
 from bobuild.steamcmd import workshop_build_item
 from bobuild.steamcmd import workshop_build_item_many
+from bobuild.tasks import bo_build_lock_name
 from bobuild.tasks import broker
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
@@ -261,9 +262,6 @@ async def gather(
                 pass
 
 
-_bo_build_lock_name = "bobuild.tasks_bo.check_for_updates__LOCK"
-
-
 # TODO: return a result from this task?
 # TODO: store hashes in metadata so we can retry a failed task for the hashes?
 #       For tasks that begin successfully but then fail for some reason halfway?
@@ -291,7 +289,7 @@ async def check_for_updates(
     """
     # TODO: should this or should it not be thread-local?
     # TODO: what happens if this doesn't have a timeout?
-    lock = redis.lock(_bo_build_lock_name, timeout=180 * 60, blocking=True)
+    lock = redis.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
     acquired = await lock.acquire(blocking=True, blocking_timeout=5.0)
     if not acquired:
         logger.info("could not acquire task lock, skipping task run")

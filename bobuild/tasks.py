@@ -8,8 +8,8 @@ import discord
 from redis.asyncio import ConnectionPool
 from redis.asyncio import Redis
 from redis.asyncio.connection import parse_url
+from redis.asyncio.lock import Lock
 from taskiq import AsyncBroker
-from taskiq import InMemoryBroker
 from taskiq import ScheduleSource
 from taskiq import ScheduledTask
 from taskiq import TaskiqEvents
@@ -29,7 +29,6 @@ from bobuild.config import DiscordConfig
 from bobuild.log import InterceptHandler
 from bobuild.log import logger
 from bobuild.utils import get_var
-from bobuild.utils import is_dev_env
 
 if platform.system() == "Windows":
     # noinspection PyUnresolvedReferences
@@ -41,8 +40,9 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 UNIQUE_PREFIX = "taskiq_unique"
 
-_dummy_data: dict[str, str]
 _default_expiration = 180 * 60
+
+bo_build_lock_name = "bobuild.tasks_bo.check_for_updates__LOCK"
 
 
 class UniqueLabelScheduleSource(LabelScheduleSource):
@@ -53,7 +53,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
     def __init__(
             self,
             _broker: AsyncBroker,
-            redis_url: str | None = None,
+            redis_url: str,
             expiration: int = _default_expiration,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
@@ -61,53 +61,66 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
         self.expiration = expiration
         self.unique_task_name = unique_task_name
-        if redis_url is not None:
-            self.pool: Redis | None = Redis.from_url(redis_url)
-        else:
-            global _dummy_data
-            if not _dummy_data:
-                _dummy_data = {}
+        self.pool = Redis.from_url(redis_url)
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
         """TODO: this is actually not 100% reliable!
             - If this expires without having consumed the tasks, we will
               queue another task! Needs a better solution!
+        TODO: did using PubSub solve the above problem?
         """
-
+        lock: Lock | None = None
         try:
-            global _dummy_data
-
-            if task.task_name != self.unique_task_name:
-                return
-
-            if self.pool is None:
-                return
-
-            key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
-
-            if self.pool is None:
-                has_key = _dummy_data.get(key, None) is not None
+            lock = self.pool.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
+            acquired = await lock.acquire(blocking=True, blocking_timeout=0.1)  # type: ignore[union-attr]
+            if not acquired:
+                # There is currently no task running, free to start a new one.
+                pass
             else:
-                has_key = await self.pool.get(key) is not None
-
-            if has_key:
                 logger.info("task {} is already running, not starting a new one", task.task_name)
-                task.task_name = "bobuild.tasks_bo.bo_dummy_task"
-                return
-
-            if self.pool is None:
-                _dummy_data[key] = task.task_name
-            else:
-                await self.pool.set(key, 1, ex=self.expiration)
-
         except Exception as e:
             logger.exception(e)
+        finally:
+            if lock:
+                try:
+                    await lock.release()
+                except Exception as e:
+                    logger.error("error releasing lock: {}: {}",
+                                 type(e).__name__, e)
+
+    # try:
+    #     global _dummy_data
+    #
+    #     if task.task_name != self.unique_task_name:
+    #         return
+    #
+    #     if self.pool is None:
+    #         return
+    #
+    #     key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
+    #
+    #     if self.pool is None:
+    #         has_key = _dummy_data.get(key, None) is not None
+    #     else:
+    #         has_key = await self.pool.get(key) is not None
+    #
+    #     if has_key:
+    #         logger.info("task {} is already running, not starting a new one", task.task_name)
+    #         task.task_name = "bobuild.tasks_bo.bo_dummy_task"
+    #         return
+    #
+    #     if self.pool is None:
+    #         _dummy_data[key] = task.task_name
+    #     else:
+    #         await self.pool.set(key, 1, ex=self.expiration)
+    #
+    # except Exception as e:
+    #     logger.exception(e)
 
     @override
     async def shutdown(self):
-        if self.pool is not None:
-            await self.pool.close()
+        await self.pool.close()
 
 
 # https://github.com/taskiq-python/taskiq/issues/271
@@ -119,7 +132,7 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
 
     def __init__(
             self,
-            redis_url: str | None = None,
+            redis_url: str,
             expiration: int = _default_expiration,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
@@ -127,13 +140,7 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
 
         self.expiration = expiration
         self.unique_task_name = unique_task_name
-
-        if redis_url is not None:
-            self.pool: Redis | None = Redis.from_url(redis_url)
-        else:
-            global _dummy_data
-            if not _dummy_data:
-                _dummy_data = {}
+        self.pool = Redis.from_url(redis_url)
 
     @override
     async def post_save(
@@ -147,18 +154,13 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
         try:
             if message.task_name == self.unique_task_name:
                 logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
-                if self.pool is None:
-                    global _dummy_data
-                    del _dummy_data[message.task_name]
-                else:
-                    await self.pool.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
+                await self.pool.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
         except Exception as e:
             logger.exception(e)
 
     @override
     async def shutdown(self):
-        if self.pool is not None:
-            await self.pool.close()
+        await self.pool.close()
 
 
 broker: AsyncBroker
@@ -166,118 +168,119 @@ scheduler: TaskiqScheduler
 source: ScheduleSource
 REDIS_URL: str
 
-if is_dev_env():
-    logger.info("using InMemoryBroker in development environment")
+# if is_dev_env():
+#     logger.info("using InMemoryBroker in development environment")
+#
+#     broker = InMemoryBroker(
+#     ).with_middlewares(UniqueTaskMiddleware(
+#         unique_task_name="bobuild.tasks_bo.check_for_updates",
+#     ))
+#
+#     source = UniqueLabelScheduleSource(
+#         broker,
+#         unique_task_name="bobuild.tasks_bo.check_for_updates",
+#     )
+#
+#     scheduler = TaskiqScheduler(
+#         broker=broker,
+#         sources=[source],
+#     )
+# else:
 
-    broker = InMemoryBroker(
-    ).with_middlewares(UniqueTaskMiddleware(
-        unique_task_name="bobuild.tasks_bo.check_for_updates",
-    ))
+REDIS_URL = get_var("BO_REDIS_URL")
 
-    source = UniqueLabelScheduleSource(
-        broker,
-        unique_task_name="bobuild.tasks_bo.check_for_updates",
-    )
+if redis_hostname := get_var("BO_REDIS_HOSTNAME", None):
+    parts = urlparse(REDIS_URL)
+    hostname = parse_url(REDIS_URL)["host"]
 
-    scheduler = TaskiqScheduler(
-        broker=broker,
-        sources=[source],
-    )
+    logger.info("replacing hostname in Redis URL: '{}' -> '{}'",
+                hostname, redis_hostname)
+
+    # TODO: this is unbelievably fucking hacky. Find a proper
+    #   way to do this whole thing here!
+    new_netloc = parts.netloc.replace(hostname, redis_hostname)
+    parts = parts._replace(netloc=new_netloc)
+
+    REDIS_URL = str(urlunparse(parts))
+
+# TODO: the better way to do this would be to have a separate module for
+#   scheduler that does not cause this env var to be checked!
+is_scheduler_only = get_var("BO_TASK_SCHEDULER", "0") == "1"
+if is_scheduler_only:
+    logger.info("running in scheduler-only mode, allowing empty BO_POSTGRES_URL")
+    PG_URL = get_var("BO_POSTGRES_URL", None)
 else:
-    REDIS_URL = get_var("BO_REDIS_URL")
+    PG_URL = get_var("BO_POSTGRES_URL")
 
-    if redis_hostname := get_var("BO_REDIS_HOSTNAME", None):
-        parts = urlparse(REDIS_URL)
-        hostname = parse_url(REDIS_URL)["host"]
+result_backend: AsyncpgResultBackend | None = None
 
-        logger.info("replacing hostname in Redis URL: '{}' -> '{}'",
-                    hostname, redis_hostname)
-
-        # TODO: this is unbelievably fucking hacky. Find a proper
-        #   way to do this whole thing here!
-        new_netloc = parts.netloc.replace(hostname, redis_hostname)
-        parts = parts._replace(netloc=new_netloc)
-
-        REDIS_URL = str(urlunparse(parts))
-
-    # TODO: the better way to do this would be to have a separate module for
-    #   scheduler that does not cause this env var to be checked!
-    is_scheduler_only = get_var("BO_TASK_SCHEDULER", "0") == "1"
-    if is_scheduler_only:
-        logger.info("running in scheduler-only mode, allowing empty BO_POSTGRES_URL")
-        PG_URL = get_var("BO_POSTGRES_URL", None)
-    else:
-        PG_URL = get_var("BO_POSTGRES_URL")
-
-    result_backend: AsyncpgResultBackend | None = None
-
-    if is_scheduler_only and PG_URL is None:
-        logger.info(
-            "running in scheduler-only mode, "
-            "BO_POSTGRES_URL is not set, not creating result backend")
-    else:
-        result_backend = AsyncpgResultBackend(
-            dsn=PG_URL,
-            keep_results=True,
-            table_name="taskiq_result",
-            field_for_task_id="Text",
-            serializer=ORJSONSerializer(),
-        )
-
-    broker = PubSubBroker(
-        url=REDIS_URL,
-    ).with_serializer(
-        ORJSONSerializer()
-    ).with_middlewares(
-        UniqueTaskMiddleware(
-            redis_url=REDIS_URL,
-            unique_task_name="bobuild.tasks_bo.check_for_updates",
-        ),
+if is_scheduler_only and PG_URL is None:
+    logger.info(
+        "running in scheduler-only mode, "
+        "BO_POSTGRES_URL is not set, not creating result backend")
+else:
+    result_backend = AsyncpgResultBackend(
+        dsn=PG_URL,
+        keep_results=True,
+        table_name="taskiq_result",
+        field_for_task_id="Text",
+        serializer=ORJSONSerializer(),
     )
 
-    if result_backend is not None:
-        broker = broker.with_result_backend(result_backend)
-
-    source = UniqueLabelScheduleSource(
-        broker,
+broker = PubSubBroker(
+    url=REDIS_URL,
+).with_serializer(
+    ORJSONSerializer()
+).with_middlewares(
+    UniqueTaskMiddleware(
         redis_url=REDIS_URL,
         unique_task_name="bobuild.tasks_bo.check_for_updates",
-    )
+    ),
+)
 
-    scheduler = TaskiqScheduler(
-        broker=broker,
-        sources=[source],
-    )
+if result_backend is not None:
+    broker = broker.with_result_backend(result_backend)
+
+source = UniqueLabelScheduleSource(
+    broker,
+    redis_url=REDIS_URL,
+    unique_task_name="bobuild.tasks_bo.check_for_updates",
+)
+
+scheduler = TaskiqScheduler(
+    broker=broker,
+    sources=[source],
+)
 
 
-    @broker.on_event(TaskiqEvents.WORKER_STARTUP)
-    async def startup(state: TaskiqState) -> None:
-        state.redis = ConnectionPool.from_url(REDIS_URL)
+@broker.on_event(TaskiqEvents.WORKER_STARTUP)
+async def startup(state: TaskiqState) -> None:
+    state.redis = ConnectionPool.from_url(REDIS_URL)
 
 
-    @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
-    async def shutdown(state: TaskiqState) -> None:
-        try:
-            pool: ConnectionPool = state.redis
-            redis: Redis = Redis.from_pool(pool)
+@broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
+async def shutdown(state: TaskiqState) -> None:
+    try:
+        pool: ConnectionPool = state.redis
+        redis: Redis = Redis.from_pool(pool)
 
-            # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
-            # TODO: this is getting kinda spaghetti-ey.
+        # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
+        # TODO: this is getting kinda spaghetti-ey.
 
-            logger.info("broker state: {}", state)
-            ids: dict[str, str]
-            if ids := getattr(state, "ids_", {}):
-                for task_id in ids:
-                    discord_cfg = DiscordConfig()
-                    await send_webhook(
-                        url=discord_cfg.builds_webhook_url,
-                        embed_title="Build cancelled! :warning:",
-                        embed_color=discord.Color.yellow(),
-                        embed_footer=task_id,
-                    )
+        logger.info("broker state: {}", state)
+        ids: dict[str, str]
+        if ids := getattr(state, "ids_", {}):
+            for task_id in ids:
+                discord_cfg = DiscordConfig()
+                await send_webhook(
+                    url=discord_cfg.builds_webhook_url,
+                    embed_title="Build cancelled! :warning:",
+                    embed_color=discord.Color.yellow(),
+                    embed_footer=task_id,
+                )
 
-            await redis.close()
-            await pool.disconnect()
+        await redis.close()
+        await pool.disconnect()
 
-        except Exception as e:
-            logger.exception(e)
+    except Exception as e:
+        logger.exception(e)
