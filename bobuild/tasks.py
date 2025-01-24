@@ -76,9 +76,10 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
             acquired = await lock.acquire(blocking=True, blocking_timeout=0.1)  # type: ignore[union-attr]
             if not acquired:
                 # There is currently no task running, free to start a new one.
-                pass
+                return
             else:
                 logger.info("task {} is already running, not starting a new one", task.task_name)
+                task.task_name = "bobuild.tasks_bo.bo_dummy_task"
         except Exception as e:
             logger.exception(e)
         finally:
@@ -88,35 +89,6 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
                 except Exception as e:
                     logger.error("error releasing lock: {}: {}",
                                  type(e).__name__, e)
-
-    # try:
-    #     global _dummy_data
-    #
-    #     if task.task_name != self.unique_task_name:
-    #         return
-    #
-    #     if self.pool is None:
-    #         return
-    #
-    #     key = f"{UNIQUE_PREFIX}:{self.unique_task_name}"
-    #
-    #     if self.pool is None:
-    #         has_key = _dummy_data.get(key, None) is not None
-    #     else:
-    #         has_key = await self.pool.get(key) is not None
-    #
-    #     if has_key:
-    #         logger.info("task {} is already running, not starting a new one", task.task_name)
-    #         task.task_name = "bobuild.tasks_bo.bo_dummy_task"
-    #         return
-    #
-    #     if self.pool is None:
-    #         _dummy_data[key] = task.task_name
-    #     else:
-    #         await self.pool.set(key, 1, ex=self.expiration)
-    #
-    # except Exception as e:
-    #     logger.exception(e)
 
     @override
     async def shutdown(self):
@@ -149,7 +121,6 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
             _: TaskiqResult[Any],
     ) -> None:
         # TODO: what happens if task never saves its result?
-
         # TODO: this never runs if worker is shut down mid-task?
         try:
             if message.task_name == self.unique_task_name:
@@ -166,27 +137,6 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
 broker: AsyncBroker
 scheduler: TaskiqScheduler
 source: ScheduleSource
-REDIS_URL: str
-
-# if is_dev_env():
-#     logger.info("using InMemoryBroker in development environment")
-#
-#     broker = InMemoryBroker(
-#     ).with_middlewares(UniqueTaskMiddleware(
-#         unique_task_name="bobuild.tasks_bo.check_for_updates",
-#     ))
-#
-#     source = UniqueLabelScheduleSource(
-#         broker,
-#         unique_task_name="bobuild.tasks_bo.check_for_updates",
-#     )
-#
-#     scheduler = TaskiqScheduler(
-#         broker=broker,
-#         sources=[source],
-#     )
-# else:
-
 REDIS_URL = get_var("BO_REDIS_URL")
 
 if redis_hostname := get_var("BO_REDIS_HOSTNAME", None):
