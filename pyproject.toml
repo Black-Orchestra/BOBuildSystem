@@ -28,6 +28,7 @@ dependencies = [
     "Pillow==11.1.0",
     "aiohttp[speedups]==3.11.11",
     "audioop-lts==0.2.1; python_version >= '3.13'", # Needed by discord.py.
+    "beautifulsoup4==4.12.3",
     "boltons==24.1.0",
     "certifi==2024.12.14",
     "discord.py==2.4.0",
@@ -52,6 +53,7 @@ dev = [
     "isort",
     "mypy",
     "ruff",
+    "types-beautifulsoup4",
     "types-psutil",
     "types-pywin32",
     "types-tqdm",
@@ -73,6 +75,7 @@ dependencies = [
     "isort",
     "mypy",
     "ruff",
+    "types-beautifulsoup4",
     "types-psutil",
     "types-pywin32",
     "types-tqdm",
