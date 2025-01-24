@@ -6,16 +6,18 @@ import random
 import shutil
 import string
 import traceback
-from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Annotated
 from typing import Awaitable
 from typing import Iterator
+from typing import Literal
 from typing import TypeVar
+from typing import overload
 
 import discord
 from redis.asyncio import Redis
@@ -220,8 +222,29 @@ def dir_size(path: Path) -> int:
 T = TypeVar("T")
 
 
-async def gather(*tasks: asyncio.Future[T] | Awaitable[T]) -> list[T]:
+@overload
+async def gather(
+        *tasks: asyncio.Future[T] | Awaitable[T],
+        return_exceptions: Literal[False] = ...,
+) -> list[T]:
+    ...
+
+
+@overload
+async def gather(
+        *tasks: asyncio.Future[T] | Awaitable[T],
+        return_exceptions: Literal[True] = ...,
+) -> list[T | Exception]:
+    ...
+
+
+async def gather(
+        *tasks: asyncio.Future[T] | Awaitable[T],
+        return_exceptions: bool = False,
+) -> list[T]:
     try:
+        # TODO: implement handling for this!
+        # return await asyncio.gather(*tasks, return_exceptions=return_exceptions)
         return await asyncio.gather(*tasks)
     except Exception as e:
         logger.exception("task failure: {}, cancelling all remaining", e)
@@ -273,6 +296,8 @@ async def check_for_updates(
     if not acquired:
         logger.info("could not acquire task lock, skipping task run")
         return
+
+    loop = asyncio.get_running_loop()
 
     started_updating = False
     build_id = f"Build ID {context.message.task_id}"
@@ -716,35 +741,51 @@ Mercurial maps commit: {hg_maps_hash}.
         logger.info("found {} maps for workshop uploads", len(map_sws_content_folders))
 
         logger.info("copying map files to SWS upload content directories")
-        map_fs: list[Future] = []
-        with ThreadPoolExecutor() as executor:
+        # map_fs: list[Future] = []
+        map_copy_tasks = []
+        workers = max(((os.cpu_count() or 1) - 2), 1)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             for pub_sws_map in pub_sws_maps:
                 rel_path = pub_sws_map.relative_to(pub_maps_dir).parent
                 map_content_dir = map_sws_content_folders[pub_sws_map.stem] / rel_path
                 map_content_dir.mkdir(parents=True, exist_ok=True)
-                map_fs.append(executor.submit(
-                    copy_tree,
-                    src_dir=pub_sws_map.parent,
-                    dst_dir=map_content_dir,
-                    src_glob="*.roe",
-                    check_md5=False,
+                map_copy_tasks.append(loop.run_in_executor(
+                    executor,
+                    partial(
+                        copy_tree,
+                        src_dir=pub_sws_map.parent,
+                        dst_dir=map_content_dir,
+                        src_glob="*.roe",
+                        check_md5=False,
+                    ),
                 ))
-        map_exs: list[str] = []
-        for mf in map_fs:
-            try:
-                mf.result()
-            except Exception as ex:
-                logger.error("future {} failed with error: {}: {}",
-                             mf, type(ex).__name__, ex)
-                map_exs.append(str(ex))
-        if map_exs:
-            ex_string = "\n".join(map_exs)
+
+        try:
+            # TODO: update this when return_exceptions=True is handled!
+            await gather(*map_copy_tasks)
+        except Exception as e:
             raise RuntimeError(
-                "failed to copy map files to SWS content directories: {}", ex_string)
+                "failed to copy map files to SWS content directories: "
+                f"{type(e).__name__}: {e}"
+            )
+
+        # map_exs: list[str] = []
+        # for mf in map_fs:
+        #     try:
+        #         mf.result()
+        #     except Exception as ex:
+        #         logger.error("future {} failed with error: {}: {}",
+        #                      mf, type(ex).__name__, ex)
+        #         map_exs.append(str(ex))
+        # if map_exs:
+        #     ex_string = "\n".join(map_exs)
+        #     raise RuntimeError(
+        #         "failed to copy map files to SWS content directories: {}", ex_string)
 
         common_map_staging_dir = _repo_dir / "workshop/generated/sws_map_staging/"
         logger.info("common map staging dir: {}", common_map_staging_dir)
-        fs: list[Future[Path]] = []
+        # fs: list[Future[Path]] = []
+        prepare_map_tasks = []
         with ThreadPoolExecutor() as executor:
             template_img = _repo_dir / "workshop/bo_beta_workshop_map.png"
             template_vdf = _repo_dir / "workshop/BOBetaMapTemplate.vdf"
@@ -758,34 +799,46 @@ Mercurial maps commit: {hg_maps_hash}.
                     logger.warning("no SWS ID for map '{}', skipping", map_name)
                     continue
 
-                fs.append(executor.submit(
-                    prepare_map_for_sws,
-                    publishedfileid=publishedfileid,
-                    map_name=map_name,
-                    template_img=template_img,
-                    template_vdf=template_vdf,
-                    staging_dir=staging_dir,
-                    git_hash=git_hash,
-                    hg_pkg_hash=hg_pkgs_hash,
-                    hg_maps_hash=hg_maps_hash,
-                    changenote=changenote,
-                    content_folder=map_content_folder,
-                    build_id=context.message.task_id,
+                prepare_map_tasks.append(loop.run_in_executor(
+                    executor,
+                    partial(
+                        prepare_map_for_sws,
+                        publishedfileid=publishedfileid,
+                        map_name=map_name,
+                        template_img=template_img,
+                        template_vdf=template_vdf,
+                        staging_dir=staging_dir,
+                        git_hash=git_hash,
+                        hg_pkg_hash=hg_pkgs_hash,
+                        hg_maps_hash=hg_maps_hash,
+                        changenote=changenote,
+                        content_folder=map_content_folder,
+                        build_id=context.message.task_id,
+                    ),
                 ))
 
-        map_vdf_configs: list[Path] = []
-        exs: list[str] = []
-        for f in fs:
-            try:
-                result = f.result()
-                map_vdf_configs.append(result)
-            except Exception as ex:
-                logger.error("future {} failed with error: {}: {}",
-                             f, type(ex).__name__, ex)
-                exs.append(str(ex))
-        if exs:
-            ex_string = "\n".join(exs)
-            raise RuntimeError("failed to render map preview files: {}", ex_string)
+        map_vdf_configs: list[Path]
+        try:
+            # TODO: update this when return_exceptions=True is handled!
+            map_vdf_configs = await gather(*prepare_map_tasks)
+        except Exception as e:
+            raise RuntimeError(
+                "failed to prepare map for SWS: "
+                f"{type(e).__name__}: {e}"
+            )
+
+        # exs: list[str] = []
+        # for f in fs:
+        #     try:
+        #         result = f.result()
+        #         map_vdf_configs.append(result)
+        #     except Exception as ex:
+        #         logger.error("future {} failed with error: {}: {}",
+        #                      f, type(ex).__name__, ex)
+        #         exs.append(str(ex))
+        # if exs:
+        #     ex_string = "\n".join(exs)
+        #     raise RuntimeError("failed to render map preview files: {}", ex_string)
 
         # TODO: it's possible a new map is added to the repo, which is not listed
         #   in map_ids_factory(). Is there a nice way to automate creation of new
@@ -834,8 +887,9 @@ Mercurial maps commit: {hg_maps_hash}.
         )
 
         logger.info("building {} WW2 SWS map items", len(map_vdf_configs))
-        wrks = int(math.ceil((os.cpu_count() or 8) / 2))
-        map_manifest_futures: dict[str, Future[WorkshopManifest]] = {}
+        wrks = int(math.ceil(((os.cpu_count() or 8) - 1) / 2))
+        # map_manifest_futures: dict[str, Future[WorkshopManifest]] = {}
+        map_manifest_tasks: dict[str, asyncio.Future[WorkshopManifest]] = {}
         md5_executor = ThreadPoolExecutor(max_workers=wrks)
         map_manifest_out_files: dict[str, Path] = {}
         with ThreadPoolExecutor(max_workers=wrks) as main_executor:
@@ -843,41 +897,58 @@ Mercurial maps commit: {hg_maps_hash}.
                 staging_dir = common_map_staging_dir / map_name
                 map_manifest_out_file = staging_dir / f"{map_name}_sws_manifest_{context.message.task_id}.json"
                 map_manifest_out_files[map_name] = map_manifest_out_file
-                map_manifest_futures[map_name] = main_executor.submit(
-                    make_sws_manifest,
-                    out_file=map_manifest_out_file,
-                    content_folder=map_content_folder,
-                    content_folder_parent=map_content_folder,
-                    item_id=rs2_config.bo_dev_beta_map_ids[map_name],
-                    git_hash=git_hash,
-                    hg_packages_hash=hg_pkgs_hash,
-                    hg_maps_hash=hg_maps_hash,
-                    build_id=context.message.task_id,
-                    build_time_utc=utcnow(),
-                    executor=md5_executor,
+
+                map_manifest_tasks[map_name] = loop.run_in_executor(
+                    main_executor,
+                    partial(
+                        make_sws_manifest,
+                        out_file=map_manifest_out_file,
+                        content_folder=map_content_folder,
+                        content_folder_parent=map_content_folder,
+                        item_id=rs2_config.bo_dev_beta_map_ids[map_name],
+                        git_hash=git_hash,
+                        hg_packages_hash=hg_pkgs_hash,
+                        hg_maps_hash=hg_maps_hash,
+                        build_id=context.message.task_id,
+                        build_time_utc=utcnow(),
+                        executor=md5_executor,
+                    ),
                 )
 
         # If it doesn't finish instantly, we're fucked.
         # TODO: think about how to handle potential error here.
+        # TODO: should this also use loop.run_in_executor?
         logger.info("waiting for MD5 calculation ThreadPoolExecutor to finish")
         md5_executor.shutdown(wait=True)
 
-        map_future_errors = []
-        for map_name, map_future in map_manifest_futures.items():
-            try:
-                manifest = map_future.result()
-                logger.info("{} SWS manifest: {}", map_name, manifest)
-                map_manifest_in_sws_item_path = map_manifest_out_files[map_name].name
-                # Include the manifest in the SWS item content so the server can use it.
-                dump_manifest(manifest, map_sws_content_folders[map_name] / map_manifest_in_sws_item_path)
-            except Exception as e:
-                logger.error("future {} failed with error: {}: {}",
-                             map_future, type(e).__name__, e)
-                map_future_errors.append(str(e))
+        try:
+            # TODO: update this when return_exceptions=True is handled!
+            manifests = await gather(*map_manifest_tasks.values())
+        except Exception as e:
+            raise RuntimeError(f"failed to create SWS manifests: {e}")
 
-        if map_future_errors:
-            map_future_errors_str = "\n".join(map_future_errors)
-            raise RuntimeError(f"failed to create SWS manifests:\n{map_future_errors_str}")
+        for map_name, manifest in zip(map_manifest_tasks, manifests):
+            logger.info("{} SWS manifest: {}", map_name, manifest)
+            map_manifest_in_sws_item_path = map_manifest_out_files[map_name].name
+            # Include the manifest in the SWS item content so the server can use it.
+            dump_manifest(manifest, map_sws_content_folders[map_name] / map_manifest_in_sws_item_path)
+
+        # map_future_errors = []
+        # for map_name, map_future in map_manifest_futures.items():
+        #     try:
+        #         manifest = map_future.result()
+        #         logger.info("{} SWS manifest: {}", map_name, manifest)
+        #         map_manifest_in_sws_item_path = map_manifest_out_files[map_name].name
+        #         # Include the manifest in the SWS item content so the server can use it.
+        #         dump_manifest(manifest, map_sws_content_folders[map_name] / map_manifest_in_sws_item_path)
+        #     except Exception as e:
+        #         logger.error("future {} failed with error: {}: {}",
+        #                      map_future, type(e).__name__, e)
+        #         map_future_errors.append(str(e))
+        #
+        # if map_future_errors:
+        #     map_future_errors_str = "\n".join(map_future_errors)
+        #     raise RuntimeError(f"failed to create SWS manifests:\n{map_future_errors_str}")
 
         code = await get_steamguard_code(
             steamcmd_config.steamguard_cli_path,

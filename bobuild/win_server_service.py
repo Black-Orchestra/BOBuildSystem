@@ -52,6 +52,7 @@ from bobuild.steamcmd import RS2_APPID
 from bobuild.steamcmd import download_workshop_item_many
 from bobuild.steamcmd import install_validate_app
 from bobuild.steamcmd import workshop_status
+from bobuild.tasks_bo import gather
 from bobuild.utils import asyncio_run
 from bobuild.utils import get_var
 from bobuild.utils import utcnow
@@ -498,7 +499,11 @@ async def notify_shutdown(
         await asyncio.sleep(0.1)
 
 
-def install_workshop_content(
+def install_workshop_item():
+    pass
+
+
+async def install_workshop_content(
         service: BOWinServerService,
         content_dir: Path,
         cache_dir: Path,
@@ -509,28 +514,34 @@ def install_workshop_content(
         f"cache_dir='{cache_dir}'"
     )
     item_dirs = (d for d in content_dir.iterdir() if d.is_dir())
-    for item_dir in item_dirs:
-        try:
-            item_id = int(item_dir.name)
-        except ValueError as e:
-            service.log_warning(
-                "invalid workshop content directory: "
-                f"'{item_dir}': cannot convert dir name to ID: {e}")
-            continue
-        if item_id not in item_ids:
-            service.log_info(
-                f"found item {item_id} in content dir, but it is not found in"
-                "list of item IDS to install, skipping")
-            continue
 
-        service.log_info(f"installing item: {item_id}")
-        inis = item_dir.glob("*.ini")
-        # TODO: need to update this if we get more localization languages!
-        ints = item_dir.glob("*.int")
+    pool = asyncio.get_running_loop()
+    workers = max(((os.cpu_count() or 1) - 2), 1)
+    install_tasks = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for item_dir in item_dirs:
+            try:
+                item_id = int(item_dir.name)
+            except ValueError as e:
+                service.log_warning(
+                    "invalid workshop content directory: "
+                    f"'{item_dir}': cannot convert dir name to ID: {e}")
+                continue
+            if item_id not in item_ids:
+                service.log_info(
+                    f"found item {item_id} in content dir, but it is not found in"
+                    "list of item IDS to install, skipping")
+                continue
 
-        workers = max((os.cpu_count() - 2), 1)
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            pass
+            service.log_info(f"installing item: {item_id}")
+            inis = item_dir.glob("*.ini")
+            # TODO: need to update this if we get more localization languages!
+            ints = item_dir.glob("*.int")
+
+            install_tasks.append(pool.run_in_executor(
+                executor, install_workshop_item))
+
+    await gather(*install_tasks)
 
 
 async def main_task(
@@ -655,7 +666,7 @@ async def main_task(
 
                 content_dir = rs2_config.server_workshop_dir / f"content/{RS2_APPID}/"
                 cache_dir = rs2_config.server_cache_dir
-                install_workshop_content(
+                await install_workshop_content(
                     service=service,
                     content_dir=content_dir,
                     cache_dir=cache_dir,

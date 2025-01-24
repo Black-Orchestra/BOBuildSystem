@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import os
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -447,7 +448,8 @@ def make_sws_manifest(
 
     else:
         md5_futures: dict[Path, Future[str]] = {}
-        with ThreadPoolExecutor() as executor:
+        workers = max(((os.cpu_count() or 1) - 2), 1)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             for file in [x for x in content_folder.rglob("*") if x.is_file()]:
                 md5_futures[file] = executor.submit(
                     file_hexdigest,
