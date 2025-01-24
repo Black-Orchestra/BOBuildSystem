@@ -71,6 +71,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         TODO: did using PubSub solve the above problem?
         """
         lock: Lock | None = None
+        acquired = False
         try:
             lock = self.pool.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
             acquired = await lock.acquire(blocking=True, blocking_timeout=0.1)  # type: ignore[union-attr]
@@ -83,7 +84,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         except Exception as e:
             logger.exception(e)
         finally:
-            if lock:
+            if lock and acquired:
                 try:
                     await lock.release()
                 except Exception as e:

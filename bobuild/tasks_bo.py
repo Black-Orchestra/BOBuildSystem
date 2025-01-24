@@ -1055,7 +1055,8 @@ Mercurial maps commit: {hg_maps_hash}.
         raise
     finally:
         try:
-            await lock.release()
+            if acquired:
+                await lock.release()
         except (Exception, KeyboardInterrupt, asyncio.CancelledError):
             logger.exception("error releasing task lock")
 
