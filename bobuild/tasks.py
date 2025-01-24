@@ -53,7 +53,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
     def __init__(
             self,
             _broker: AsyncBroker,
-            redis_url: str,
+            redis_pool: ConnectionPool,
             expiration: int = _default_expiration,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
@@ -61,7 +61,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
         self.expiration = expiration
         self.unique_task_name = unique_task_name
-        self.pool = Redis.from_url(redis_url)
+        self.redis = Redis.from_pool(redis_pool)
 
     @override
     async def pre_send(self, task: ScheduledTask) -> None:
@@ -73,7 +73,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
         lock: Lock | None = None
         acquired = False
         try:
-            lock = self.pool.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
+            lock = self.redis.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
             acquired = await lock.acquire(blocking=True, blocking_timeout=0.1)  # type: ignore[union-attr]
             if acquired:
                 # There is currently no task running, free to start a new one.
@@ -93,7 +93,7 @@ class UniqueLabelScheduleSource(LabelScheduleSource):
 
     @override
     async def shutdown(self):
-        await self.pool.close()
+        await self.redis.close()
 
 
 # https://github.com/taskiq-python/taskiq/issues/271
@@ -105,7 +105,7 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
 
     def __init__(
             self,
-            redis_url: str,
+            redis_pool: ConnectionPool,
             expiration: int = _default_expiration,
             unique_task_name: str | None = None,  # TODO: take a list here if needed?
     ) -> None:
@@ -113,7 +113,7 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
 
         self.expiration = expiration
         self.unique_task_name = unique_task_name
-        self.pool = Redis.from_url(redis_url)
+        self.redis = Redis.from_pool(redis_pool)
 
     @override
     async def post_save(
@@ -126,13 +126,13 @@ class UniqueTaskMiddleware(TaskiqMiddleware):
         try:
             if message.task_name == self.unique_task_name:
                 logger.info("deleting taskiq_unique key for task: '{}'", message.task_name)
-                await self.pool.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
+                await self.redis.delete(f"{UNIQUE_PREFIX}:{message.task_name}")
         except Exception as e:
             logger.exception(e)
 
     @override
     async def shutdown(self):
-        await self.pool.close()
+        await self.redis.close()
 
 
 broker: AsyncBroker
@@ -153,6 +153,10 @@ if redis_hostname := get_var("BO_REDIS_HOSTNAME", None):
     parts = parts._replace(netloc=new_netloc)
 
     REDIS_URL = str(urlunparse(parts))
+
+# TODO: just importing this module currently will connect to redis.
+#   - Use a factory function or similar to avoid this.
+shared_redis_pool = ConnectionPool.from_url(REDIS_URL)
 
 # TODO: the better way to do this would be to have a separate module for
 #   scheduler that does not cause this env var to be checked!
@@ -184,7 +188,7 @@ broker = PubSubBroker(
     ORJSONSerializer()
 ).with_middlewares(
     UniqueTaskMiddleware(
-        redis_url=REDIS_URL,
+        redis_pool=shared_redis_pool,
         unique_task_name="bobuild.tasks_bo.check_for_updates",
     ),
 )
@@ -194,7 +198,7 @@ if result_backend is not None:
 
 source = UniqueLabelScheduleSource(
     broker,
-    redis_url=REDIS_URL,
+    redis_pool=shared_redis_pool,
     unique_task_name="bobuild.tasks_bo.check_for_updates",
 )
 
@@ -206,13 +210,13 @@ scheduler = TaskiqScheduler(
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def startup(state: TaskiqState) -> None:
-    state.redis = ConnectionPool.from_url(REDIS_URL)
+    state.redis_pool = shared_redis_pool
 
 
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
 async def shutdown(state: TaskiqState) -> None:
     try:
-        pool: ConnectionPool = state.redis
+        pool: ConnectionPool = state.redis_pool
         redis: Redis = Redis.from_pool(pool)
 
         # TODO: can we even do this here? Need some neat way of detecting cancelled tasks!
@@ -231,7 +235,7 @@ async def shutdown(state: TaskiqState) -> None:
                 )
 
         await redis.close()
-        await pool.disconnect()
+        await pool.disconnect(inuse_connections=True)
 
     except Exception as e:
         logger.exception(e)

@@ -40,6 +40,8 @@ import win32api
 import win32con
 import win32service
 import win32serviceutil
+from redis.asyncio import Redis
+from redis.asyncio.lock import Lock
 
 from bobuild.bo_discord import send_webhook
 from bobuild.config import DiscordConfig
@@ -52,6 +54,8 @@ from bobuild.steamcmd import RS2_APPID
 from bobuild.steamcmd import download_workshop_item_many
 from bobuild.steamcmd import install_validate_app
 from bobuild.steamcmd import workshop_status
+from bobuild.tasks import bo_build_lock_name
+from bobuild.tasks import shared_redis_pool
 from bobuild.tasks_bo import gather
 from bobuild.utils import asyncio_run
 from bobuild.utils import get_var
@@ -600,87 +604,107 @@ async def main_task(
         url="http://100.100.72.124:8080",  # TODO: put this in config?
     )
 
+    redis = Redis.from_pool(shared_redis_pool)
+    lock: Lock | None = None
+    acquired = False
+
+    # TODO: refactor to reduce nesting.
     service.log_info("entering main service loop")
     while not await asyncio.wait_for(STOP_EVENT.wait(), timeout=1.0):
         if time.time() > (update_check_interval + update_check_time):
-            service.log_info("checking for BO Steam Workshop updates")
+            try:
+                lock = redis.lock(bo_build_lock_name, timeout=180 * 60, blocking=True)
+                acquired = await lock.acquire(blocking=True, blocking_timeout=0.1)
+                if acquired:
+                    service.log_info("checking for BO Steam Workshop updates")
 
-            sws_status = await workshop_status(
-                steamcmd_config.exe_path,
-                download_dir=rs2_config.server_workshop_dir,
-                username=steamcmd_config.username,
-                password=steamcmd_config.password,
-            )
-            service.log_info(f"workshop status: {sws_status}")
-
-            items_needing_update = [
-                status[0] for status in sws_status
-                if status[1] != "installed"
-            ]
-            installed_ids = [status[0] for status in sws_status]
-            for item_id in all_item_ids:
-                if item_id not in installed_ids:
-                    service.log_info(f"SWS item {item_id} is not installed")
-                    items_needing_update.append(item_id)
-
-            if items_needing_update:
-                service.log_info(f"items needing update/install: {items_needing_update}")
-                desc = ("Updating/installing the following Workshop items: "
-                        f"{", ".join(str(x) for x in items_needing_update)}")
-                await send_webhook(
-                    url=discord_config.server_service_webhook_url,
-                    embed_title=embed_title,
-                    embed_description=desc,
-                    embed_color=discord.Color.blue(),
-                    embed_timestamp=utcnow(),
-                    embed_footer=embed_footer,
-                )
-
-                await download_workshop_item_many(
-                    steamcmd_config.exe_path,
-                    download_dir=rs2_config.server_workshop_dir,
-                    workshop_item_ids=items_needing_update,
-                    username=steamcmd_config.username,
-                    password=steamcmd_config.password,
-                )
-
-                # Shut down BO server if it's running.
-                if server_proc is not None:
-                    service.log_info(f"terminating running server process: {server_proc}")
-                    await notify_shutdown(
-                        discord_config,
-                        embed_title=embed_title,
-                        embed_footer=embed_footer,
-                        message="Shutting down BO server for updates.",
-                        web_admin=wa,
+                    sws_status = await workshop_status(
+                        steamcmd_config.exe_path,
+                        download_dir=rs2_config.server_workshop_dir,
+                        username=steamcmd_config.username,
+                        password=steamcmd_config.password,
                     )
-                    await asyncio.sleep(2.0)  # Small grace period.
-                    try:
-                        pids = read_pids(pidfile_path)
-                        await terminate_many(pids)
-                        await terminate_server(server_proc)
-                    except psutil.Error as e:
-                        service.log_warning(f"{type(e).__name__}: {e}")
+                    service.log_info(f"workshop status: {sws_status}")
+
+                    items_needing_update = [
+                        status[0] for status in sws_status
+                        if status[1] != "installed"
+                    ]
+                    installed_ids = [status[0] for status in sws_status]
+                    for item_id in all_item_ids:
+                        if item_id not in installed_ids:
+                            service.log_info(f"SWS item {item_id} is not installed")
+                            items_needing_update.append(item_id)
+
+                    if items_needing_update:
+                        service.log_info(f"items needing update/install: {items_needing_update}")
+                        desc = ("Updating/installing the following Workshop items: "
+                                f"{", ".join(str(x) for x in items_needing_update)}")
+                        await send_webhook(
+                            url=discord_config.server_service_webhook_url,
+                            embed_title=embed_title,
+                            embed_description=desc,
+                            embed_color=discord.Color.blue(),
+                            embed_timestamp=utcnow(),
+                            embed_footer=embed_footer,
+                        )
+
+                        await download_workshop_item_many(
+                            steamcmd_config.exe_path,
+                            download_dir=rs2_config.server_workshop_dir,
+                            workshop_item_ids=items_needing_update,
+                            username=steamcmd_config.username,
+                            password=steamcmd_config.password,
+                        )
+
+                        # Shut down BO server if it's running.
+                        if server_proc is not None:
+                            service.log_info(f"terminating running server process: {server_proc}")
+                            await notify_shutdown(
+                                discord_config,
+                                embed_title=embed_title,
+                                embed_footer=embed_footer,
+                                message="Shutting down BO server for updates.",
+                                web_admin=wa,
+                            )
+                            await asyncio.sleep(2.0)  # Small grace period.
+                            try:
+                                pids = read_pids(pidfile_path)
+                                await terminate_many(pids)
+                                await terminate_server(server_proc)
+                            except psutil.Error as e:
+                                service.log_warning(f"{type(e).__name__}: {e}")
+                        else:
+                            service.log_info("no server process running, no need to terminate")
+
+                        content_dir = rs2_config.server_workshop_dir / f"content/{RS2_APPID}/"
+                        cache_dir = rs2_config.server_cache_dir
+                        await install_workshop_content(
+                            service=service,
+                            content_dir=content_dir,
+                            cache_dir=cache_dir,
+                            item_ids=workshop_items,
+                        )
+
+                        await send_webhook(
+                            url=discord_config.server_service_webhook_url,
+                            embed_title=embed_title,
+                            embed_description="Done updating Workshop items.",
+                            embed_color=discord.Color.blue(),
+                            embed_timestamp=utcnow(),
+                            embed_footer=embed_footer,
+                        )
                 else:
-                    service.log_info("no server process running, no need to terminate")
-
-                content_dir = rs2_config.server_workshop_dir / f"content/{RS2_APPID}/"
-                cache_dir = rs2_config.server_cache_dir
-                await install_workshop_content(
-                    service=service,
-                    content_dir=content_dir,
-                    cache_dir=cache_dir,
-                    item_ids=workshop_items,
-                )
-
-                await send_webhook(
-                    url=discord_config.server_service_webhook_url,
-                    embed_title=embed_title,
-                    embed_description="Done updating Workshop items.",
-                    embed_color=discord.Color.blue(),
-                    embed_timestamp=utcnow(),
-                    embed_footer=embed_footer,
-                )
+                    service.log_info("could not acquire build lock, checking for updates later")
+            except Exception as e:
+                service.log_error(f"error checking for updates: {type(e).__name__}: {e}")
+                raise
+            finally:
+                if lock and acquired:
+                    try:
+                        await lock.release()
+                    except Exception as e:
+                        service.log_error(f"error releasing lock: {type(e).__name__}: {e}")
 
             update_check_time = time.time()
 
@@ -746,8 +770,15 @@ async def main_task(
         await terminate_many(_pids)
         await terminate_server(server_proc, timeout=1.0)
 
-    ASYNC_MAIN_DONE_EVENT.set()
     pidfile_path.unlink(missing_ok=True)
+
+    # noinspection PyBroadException
+    try:
+        await redis.close()
+    except Exception:
+        pass
+
+    ASYNC_MAIN_DONE_EVENT.set()
 
 
 def main() -> None:

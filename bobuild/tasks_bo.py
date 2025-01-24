@@ -54,7 +54,7 @@ _repo_dir = Path(__file__).parent.parent.resolve()
 
 
 def redis_dep(context: Annotated[Context, TaskiqDepends()]) -> Redis:
-    return Redis(connection_pool=context.state.redis, decode_responses=True)
+    return Redis(connection_pool=context.state.redis_pool, decode_responses=True)
 
 
 def hg_config_dep(_: Annotated[Context, TaskiqDepends()]) -> MercurialConfig:
