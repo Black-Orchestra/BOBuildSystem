@@ -37,14 +37,14 @@ jobs:
       - name: Check types with MyPy
         if: always()
         run: |
-          hatch run test:run_mypy ${{ github.workspace }}
+          hatch run test:run_mypy
 
       - name: Lint code with Ruff
         if: always()
         run: |
-          hatch run test:run_ruff ${{ github.workspace }}
+          hatch run test:run_ruff
 
       - name: Check import sorting
         if: always()
         run: |
-          hatch run test:run_isort ${{ github.workspace }}
+          hatch run test:run_isort

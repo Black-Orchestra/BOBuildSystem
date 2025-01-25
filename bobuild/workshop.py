@@ -464,8 +464,11 @@ def make_sws_manifest(
     manifest = WorkshopManifest(
         workshop_item_id=item_id,
         git_hash=git_hash,
+        git_tag="null",  # TODO
         hg_packages_hash=hg_packages_hash,
+        hg_packages_tag="null",  # TODO
         hg_maps_hash=hg_maps_hash,
+        hg_maps_tag="null",  # TODO
         build_id=build_id,
         build_time_utc=build_time_utc,
         file_to_md5=file_to_md5,
