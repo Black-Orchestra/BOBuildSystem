@@ -701,7 +701,7 @@ async def main_task(
                     if items_needing_update:
                         service.log_info(f"items needing update/install: {items_needing_update}")
                         desc = ("Updating/installing the following Workshop items: "
-                                f"{", ".join(str(x) for x in items_needing_update)}")
+                                f'{", ".join(str(x) for x in items_needing_update)}')
                         await send_webhook(
                             url=discord_config.server_service_webhook_url,
                             embed_title=embed_title,
