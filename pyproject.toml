@@ -83,9 +83,9 @@ dependencies = [
 ]
 
 [tool.hatch.envs.test.scripts]
-run_mypy = "mypy --show-error-codes . -v"
-run_ruff = "ruff check . -v"
-run_isort = "isort --check-only . -v"
+run_mypy = "mypy --show-error-codes ."
+run_ruff = "ruff check ."
+run_isort = "isort --check-only ."
 
 [tool.isort]
 case_sensitive = true
