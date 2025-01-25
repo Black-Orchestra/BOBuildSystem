@@ -70,6 +70,11 @@ TODO: document these.
 - Investigate using free-threaded Python once all the dependencies
   support it. This is probably only possible in the far future.
 
+- Python 3.11 and 3.12 support is currently dropped due to
+  `asyncio.Queue.shutdown()` implementation only being available
+  starting from Python 3.13. Figure out an alternative for older
+  versions!
+
 ## License
 
 ```
