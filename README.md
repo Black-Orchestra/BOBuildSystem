@@ -4,7 +4,7 @@ Automated builds and server hosting for Black Orchestra.
 
 ## Development instructions
 
-Make sure you have at least Python 3.11 (newer is better)
+Make sure you have at least Python 3.13 (newer is better)
 installed, then run the following command to install the
 project in development mode:
 
