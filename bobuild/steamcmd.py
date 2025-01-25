@@ -10,7 +10,8 @@ from functools import partial
 from pathlib import Path
 from typing import Callable
 from typing import Literal
-from typing import overload
+
+from bobuild.typing_bo import overload
 
 if platform.system() == "Windows":
     import winreg
