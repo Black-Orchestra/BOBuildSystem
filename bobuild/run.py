@@ -13,7 +13,6 @@ from typing import IO
 from typing import Literal
 from typing import Protocol
 from typing import TypeVar
-from typing import override
 
 import watchdog.events
 from hachiko import AIOEventHandler
@@ -23,6 +22,7 @@ from bobuild.config import RS2Config
 from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
 from bobuild.typing_bo import overload
+from bobuild.typing_bo import override
 from bobuild.utils import asyncio_run
 from bobuild.utils import kill_process_tree
 
