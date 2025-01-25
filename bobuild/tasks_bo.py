@@ -999,6 +999,9 @@ Mercurial maps commit: {hg_maps_hash}.
         #   show them all. Otherwise generate a list of most common
         #   warnings and show top 10 warnings (and their counts).
 
+    except NoResultError:
+        # No need to report anything in this case.
+        raise
     except (Exception, asyncio.CancelledError, KeyboardInterrupt) as e:
         logger.error("error running task: {}: {}: {}",
                      context.message, type(e).__name__, e)
