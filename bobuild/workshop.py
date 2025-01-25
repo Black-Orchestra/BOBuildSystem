@@ -38,8 +38,11 @@ _bo_red = (204, 20, 23)
 class WorkshopManifest:
     workshop_item_id: int
     git_hash: str
+    git_tag: str
     hg_packages_hash: str
+    hg_packages_tag: str
     hg_maps_hash: str
+    hg_maps_tag: str
     build_id: str
     build_time_utc: datetime.datetime
     file_to_md5: dict[str, str]

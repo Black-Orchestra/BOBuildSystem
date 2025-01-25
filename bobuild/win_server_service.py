@@ -29,6 +29,7 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import TypeVar
 
@@ -503,21 +504,73 @@ async def notify_shutdown(
         await asyncio.sleep(0.1)
 
 
-def install_workshop_item():
-    pass
+def install_workshop_item(
+        item_id: int,
+        item_dir: Path,
+        cache_dir: Path,
+        config_dir: Path,
+        localization_dir: Path,
+):
+    inis = item_dir.glob("*.ini")
+    # TODO: need to update this if we get more localization languages!
+    ints = item_dir.glob("*.int")
+
+    item_cache_dir = cache_dir / str(item_id) / "0"
+    logger.info("deleting '{}'", item_cache_dir)
+    shutil.rmtree(item_cache_dir, ignore_errors=True)
+    item_cache_dir.mkdir(parents=True, exist_ok=True)
+
+    for ini in inis:
+        dst = config_dir / ini.name
+        logger.info("{}: copy: '{}' -> '{}'", ini, dst, item_id)
+        shutil.copy(ini, cache_dir)
+    for int_ in ints:
+        dst = localization_dir / "INT" / int_.name
+        logger.info("{}: copy: '{}' -> '{}'", int_, dst, item_id)
+        shutil.copy(int_, cache_dir)
+
+    for u in item_dir.glob("*.u"):
+        rel_path = u.relative_to(item_dir)
+        dst = item_cache_dir / rel_path
+        logger.info("{}: copy: '{}' -> '{}'", u, dst, item_id)
+        shutil.copy(u, cache_dir)
+
+    for upk in item_dir.rglob("*.upk"):
+        rel_path = upk.relative_to(item_dir)
+        dst = item_cache_dir / rel_path
+        logger.info("{}: copy: '{}' -> '{}'", upk, dst, item_id)
+        shutil.copy(upk, cache_dir)
+
+    for roe in item_dir.rglob("*.roe"):
+        rel_path = roe.relative_to(item_dir)
+        dst = item_cache_dir / rel_path
+        logger.info("{}: copy: '{}' -> '{}'", roe, dst, item_id)
+        shutil.copy(roe, cache_dir)
+
+    logger.info("removing '{}'", item_dir)
+    shutil.rmtree(item_dir, ignore_errors=True)
 
 
 async def install_workshop_content(
         service: BOWinServerService,
         content_dir: Path,
         cache_dir: Path,
+        config_dir: Path,
+        localization_dir: Path,
         item_ids: list[int],
 ):
+    cache_dir = cache_dir.resolve()
+    content_dir = content_dir.resolve()
+    config_dir = config_dir.resolve()
+    localization_dir = localization_dir.resolve()
+
     service.log_info(
         f"installing workshop content, content_dir='{content_dir}', "
         f"cache_dir='{cache_dir}'"
     )
     item_dirs = (d for d in content_dir.iterdir() if d.is_dir())
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     pool = asyncio.get_running_loop()
     workers = max(((os.cpu_count() or 1) - 2), 1)
@@ -538,14 +591,23 @@ async def install_workshop_content(
                 continue
 
             service.log_info(f"installing item: {item_id}")
-            inis = item_dir.glob("*.ini")
-            # TODO: need to update this if we get more localization languages!
-            ints = item_dir.glob("*.int")
-
             install_tasks.append(pool.run_in_executor(
-                executor, install_workshop_item))
+                executor,
+                partial(
+                    install_workshop_item,
+                    item_id=item_id,
+                    item_dir=item_dir,
+                    cache_dir=cache_dir,
+                    config_dir=config_dir,
+                    localization_dir=localization_dir,
+                ),
+            ))
 
-    await gather(*install_tasks)
+    try:
+        await gather(*install_tasks)
+    except Exception as e:
+        service.log_error(f"error installing workshop items: {type(e).__name__}: {e}")
+        raise
 
 
 async def main_task(
@@ -679,10 +741,14 @@ async def main_task(
 
                         content_dir = rs2_config.server_workshop_dir / f"content/{RS2_APPID}/"
                         cache_dir = rs2_config.server_cache_dir
+                        config_dir = rs2_config.server_install_dir / "ROGame/Config"
+                        localization_dir = rs2_config.server_install_dir / "ROGame/Localization"
                         await install_workshop_content(
                             service=service,
                             content_dir=content_dir,
                             cache_dir=cache_dir,
+                            config_dir=config_dir,
+                            localization_dir=localization_dir,
                             item_ids=workshop_items,
                         )
 

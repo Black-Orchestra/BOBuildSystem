@@ -261,7 +261,12 @@ async def gather(
             except (Exception, asyncio.CancelledError):
                 pass
 
-
+# TODO: tag-based builds:
+#   - Compile code for all commits.
+#   - BrewContent runs: if git OR packages OR map tag is newer.
+#   - Only update main WW2 item if git tag or hg packages tag is NEWER than previous tag.
+#   - Only update maps items if hg map tag is NEWER than previous tag.
+#   - Need to store latest build information postgres!
 # TODO: return a result from this task?
 # TODO: store hashes in metadata so we can retry a failed task for the hashes?
 #       For tasks that begin successfully but then fail for some reason halfway?
