@@ -16,6 +16,8 @@ _certs = certifi.where()
 _ssl_ctx = ssl.create_default_context(cafile=_certs)
 
 
+# TODO: should this module be named discord_bo.py?
+
 async def test_builds_webhook(cfg: DiscordConfig):
     await send_webhook(
         url=cfg.builds_webhook_url,
