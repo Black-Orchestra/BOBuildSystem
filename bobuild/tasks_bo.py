@@ -17,7 +17,6 @@ from typing import Awaitable
 from typing import Iterator
 from typing import Literal
 from typing import TypeVar
-from typing import overload
 
 import discord
 from redis.asyncio import Redis
@@ -42,6 +41,7 @@ from bobuild.steamcmd import workshop_build_item
 from bobuild.steamcmd import workshop_build_item_many
 from bobuild.tasks import bo_build_lock_name
 from bobuild.tasks import broker
+from bobuild.typing_bo import overload
 from bobuild.utils import copy_tree
 from bobuild.utils import utcnow
 from bobuild.workshop import WorkshopManifest
@@ -260,6 +260,7 @@ async def gather(
                 await task
             except (Exception, asyncio.CancelledError):
                 pass
+
 
 # TODO: tag-based builds:
 #   - Compile code for all commits.

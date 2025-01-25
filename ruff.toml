@@ -1,1 +1,3 @@
 exclude = ["submodules/"]
+
+lint.typing-modules = ["bobuild.typing_bo"]

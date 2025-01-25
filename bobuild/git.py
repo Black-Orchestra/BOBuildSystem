@@ -3,11 +3,11 @@ import re
 from functools import partial
 from pathlib import Path
 from typing import Literal
-from typing import overload
 
 from bobuild.config import GitConfig
 from bobuild.log import logger
 from bobuild.run import read_stream_task
+from bobuild.typing_bo import overload
 from bobuild.utils import asyncio_run
 
 

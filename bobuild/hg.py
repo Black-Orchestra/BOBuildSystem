@@ -3,12 +3,12 @@ import asyncio
 from functools import partial
 from pathlib import Path
 from typing import Literal
-from typing import overload
 
 from bobuild.config import MercurialConfig
 from bobuild.log import logger
 from bobuild.multiconfig import MultiConfigParser
 from bobuild.run import read_stream_task
+from bobuild.typing_bo import overload
 from bobuild.utils import asyncio_run
 
 
