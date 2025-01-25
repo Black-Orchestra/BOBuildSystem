@@ -460,7 +460,7 @@ async def do_get_steamguard_code(
 
 def winreg_load_used_code() -> None:
     global _USED_CODE
-    hkey: winreg.HKEYType | None = None  # type: ignore[attr-defined]
+    hkey: winreg.HKEYType | None = None  # type: ignore[name-defined]
     try:
         hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _key)  # type: ignore[attr-defined]
         _USED_CODE = winreg.QueryValueEx(hkey, "UsedCode")[0]  # type: ignore[attr-defined]
@@ -478,13 +478,13 @@ def winreg_store_used_code() -> None:
     except FileNotFoundError:
         hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, _key)  # type: ignore[attr-defined]
     try:
-        winreg.SetValueEx(
+        winreg.SetValueEx(  # type: ignore[attr-defined]
             hkey,
             "UsedCode",
             0,
-            winreg.REG_SZ,
+            winreg.REG_SZ,  # type: ignore[attr-defined]
             _USED_CODE,
-        )  # type: ignore[attr-defined]
+        )
     finally:
         if hkey is not None:
             hkey.Close()
