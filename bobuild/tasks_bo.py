@@ -21,6 +21,7 @@ from typing import TypeVar
 import discord
 from redis.asyncio import Redis
 from taskiq import Context
+from taskiq import NoResultError
 from taskiq import TaskiqDepends
 
 import bobuild.git
@@ -131,7 +132,7 @@ def prepare_map_for_sws(
     task_name="bobuild.tasks_bo.bo_dummy_task",
 )
 async def bo_dummy_task():
-    logger.info("running dummy task to do nothing")
+    raise NoResultError
 
 
 def git_url(hash_: str) -> str:
