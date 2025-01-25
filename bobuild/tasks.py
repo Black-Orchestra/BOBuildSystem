@@ -32,7 +32,7 @@ from bobuild.utils import get_var
 
 if platform.system() == "Windows":
     # noinspection PyUnresolvedReferences
-    import winloop
+    import winloop  # type: ignore[import-not-found]
 
     winloop.install()
 

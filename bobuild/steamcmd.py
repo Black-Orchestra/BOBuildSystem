@@ -460,10 +460,10 @@ async def do_get_steamguard_code(
 
 def winreg_load_used_code() -> None:
     global _USED_CODE
-    hkey: winreg.HKEYType | None = None
+    hkey: winreg.HKEYType | None = None  # type: ignore[attr-defined]
     try:
-        hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _key)
-        _USED_CODE = winreg.QueryValueEx(hkey, "UsedCode")[0]
+        hkey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _key)  # type: ignore[attr-defined]
+        _USED_CODE = winreg.QueryValueEx(hkey, "UsedCode")[0]  # type: ignore[attr-defined]
     except FileNotFoundError:
         pass
     finally:
@@ -473,12 +473,18 @@ def winreg_load_used_code() -> None:
 
 def winreg_store_used_code() -> None:
     try:
-        access = winreg.KEY_READ | winreg.KEY_SET_VALUE
-        hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, _key, access=access)
+        access = winreg.KEY_READ | winreg.KEY_SET_VALUE  # type: ignore[attr-defined]
+        hkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, _key, access=access)  # type: ignore[attr-defined]
     except FileNotFoundError:
-        hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, _key)
+        hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, _key)  # type: ignore[attr-defined]
     try:
-        winreg.SetValueEx(hkey, "UsedCode", 0, winreg.REG_SZ, _USED_CODE)
+        winreg.SetValueEx(
+            hkey,
+            "UsedCode",
+            0,
+            winreg.REG_SZ,
+            _USED_CODE,
+        )  # type: ignore[attr-defined]
     finally:
         if hkey is not None:
             hkey.Close()
