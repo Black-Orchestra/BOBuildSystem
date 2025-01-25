@@ -25,18 +25,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
-      - name: Print metadata
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Print tool versions
         run: |
           python --version
           python -c "import platform; print(platform.system())"
           mypy --version
           ruff --version
           isort --version
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[dev]
 
       - name: Build project with Hatch
         run: |
