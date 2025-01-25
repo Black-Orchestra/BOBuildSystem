@@ -439,7 +439,7 @@ async def check_for_updates(
                 pass
             else:
                 logger.info("no further work to be done")
-                return
+                raise NoResultError
 
         started_updating = True
         build_state = TaskBuildState(BuildState.SYNCING)
