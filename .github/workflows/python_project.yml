@@ -27,11 +27,11 @@ jobs:
 
       - name: Print metadata
         run: |
-          - python --version
-          - python -c "import platform; print(platform.system())"
-          - mypy --version
-          - ruff --version
-          - isort --version
+          python --version
+          python -c "import platform; print(platform.system())"
+          mypy --version
+          ruff --version
+          isort --version
 
       - name: Install dependencies
         run: |
