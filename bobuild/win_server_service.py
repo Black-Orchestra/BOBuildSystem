@@ -260,8 +260,16 @@ def read_manifest(
     # return WorkshopManifest()
 
 
-def make_bo_map_cycles(rs2_config: RS2Config, round_limit: int = 2) -> list[str]:
+def make_bo_map_cycles(
+        rs2_config: RS2Config,
+        blacklisted_map_names: list[str] | None = None,
+        round_limit: int = 2,
+) -> list[str]:
     map_names = list(rs2_config.bo_dev_beta_map_ids)
+    if blacklisted_map_names:
+        for bl in blacklisted_map_names:
+            if bl in map_names:
+                map_names.remove(bl)
     random.shuffle(map_names)
     maps_str = ",".join(f'"{x}"' for x in map_names)
     limits = (f"{round_limit}," * len(map_names)).rstrip(",")
@@ -281,6 +289,7 @@ def ensure_list_contains(lst: list[T], *args: T) -> list[T]:
 
 def ensure_server_config(
         rs2_cfg: RS2Config,
+        blacklisted_map_names: list[str] | None = None,
 ):
     web = rs2_cfg.server_install_dir / "ROGame/Config/ROWeb.ini"
     engine = rs2_cfg.server_install_dir / "ROGame/Config/ROEngine.ini"
@@ -316,7 +325,7 @@ def ensure_server_config(
     game_cfg["ROGame.ROTracking"]["DeleteTrackRecordsOlderThan"] = "0"
     game_cfg["ROGame.ROTracking"]["DeleteTrackRecordsIfNotSeenAfter"] = "0"
 
-    map_cycles = make_bo_map_cycles(rs2_cfg)
+    map_cycles = make_bo_map_cycles(rs2_cfg, blacklisted_map_names)
     game_cfg["ROGame.ROGameInfo"]["GameMapCycles"] = "\n".join(map_cycles)
     game_cfg["ROGame.ROGameInfo"]["ActiveMapCycle"] = "0"
 
@@ -643,6 +652,10 @@ async def main_task(
 
     pidfile_path.unlink(missing_ok=True)
 
+    # TODO: update this list to ban broken maps.
+    blacklisted_map_names = []
+    ensure_server_config(rs2_config, blacklisted_map_names)
+
     # TODO: is it enough to download the binaries here? Do we need to
     #   check their state regularly?
     service.log_info("installing Steamworks SDK Redist")
@@ -867,7 +880,7 @@ def main() -> None:
     # installed and the registry entries for it exist.
     if "install" in svc_args:
         if not (_bo_log_file := get_var("BO_LOG_FILE", None)):
-            # Avoid writing to the "regular" log file form the service.
+            # Avoid writing to the "regular" log file from the service.
             # TODO: this is still kinda error prone and the logging setup
             #   should definitely be improved.
             raise RuntimeError(
