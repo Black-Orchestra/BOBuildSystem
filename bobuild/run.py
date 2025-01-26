@@ -480,7 +480,7 @@ async def patch_shader_cache(
     )
 
 
-async def ensure_vneditor_modpackages_config(
+async def ensure_vneditor_config(
         rs2_config: RS2Config,
         *_,
         mod_packages: list[str] | None = None,
@@ -511,6 +511,14 @@ async def ensure_vneditor_modpackages_config(
     with config_file.open("w") as f:
         logger.info("writing config file: '{}'", config_file)
         cfg.write(f, space_around_delimiters=False)
+
+    editor_user_settings_file = docs_dir / "ROGame/Config/ROEditorUserSettings.ini"
+    user_settings_cfg = MultiConfigParser()
+    user_settings_cfg.read(editor_user_settings_file)
+    user_settings_cfg["UnrealEd.EditorUserSettings"]["bAutoSaveEnable"] = "False"
+    with editor_user_settings_file.open("w") as f:
+        logger.info("writing config file: '{}'", user_settings_cfg)
+        user_settings_cfg.write(f, space_around_delimiters=False)
 
 
 async def ensure_roengine_config(rs2_config: RS2Config, *_, **__):
@@ -578,7 +586,7 @@ async def main() -> None:
     rs2_cfg = RS2Config()
 
     action_choices = {
-        "configure_sdk": ensure_vneditor_modpackages_config,
+        "configure_sdk": ensure_vneditor_config,
         "configure_roengine": ensure_roengine_config,
         "test_find_sublevels": test_find_sublevels,
     }
