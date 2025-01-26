@@ -285,7 +285,7 @@ async def check_for_updates(
         discord_config: DiscordConfig = TaskiqDepends(discord_config_dep),
         steamcmd_config: SteamCmdConfig = TaskiqDepends(steamcmd_config_dep),
         redis: Redis = TaskiqDepends(redis_dep),
-) -> None:
+) -> dict[str, WorkshopManifest]:
     """NOTE: custom middleware and scheduler should ensure this task
     is "unique". Running multiple instances of this task in parallel
     is not supported and can break external dependencies such as
@@ -300,9 +300,11 @@ async def check_for_updates(
     acquired = await lock.acquire(blocking=True, blocking_timeout=5.0)
     if not acquired:
         logger.info("could not acquire task lock, skipping task run")
-        return
+        raise NoResultError
 
     loop = asyncio.get_running_loop()
+
+    return_value: dict[str, WorkshopManifest] = {}
 
     started_updating = False
     build_id = f"Build ID {context.message.task_id}"
@@ -321,22 +323,6 @@ async def check_for_updates(
 
     try:
         logger.info("checking for updates")
-
-        # TODO: get running task status from Postgres?
-
-        # TODO: custom scheduler should handle this!
-        # if await update_is_running():
-        #     logger.info("skip checking updates, update in-progress flag is already set")
-        #     return
-
-        # TODO: Get task ID here, store it in DB and set in-progress state?
-
-        # TODO: do something with this?
-        # old_update_timestamp = await set_update_in_progress(True)
-        # if old_update_timestamp:
-        #     logger.warning(
-        #         "old update in-progress flag was set, "
-        #         "cleanup was potentially skipped: {}", old_update_timestamp)
 
         bobuild.hg.ensure_config(hg_config)
 
@@ -436,7 +422,8 @@ async def check_for_updates(
             logger.info("no repo sync tasks, all up to date")
             if any((cloned_git, cloned_hg_pkgs, cloned_hg_maps)):
                 logger.info("found work to be done, proceeding with main task")
-                pass
+                # TODO(IMPORTANT): store task data in Postgres for tasks
+                #  that proceed with the main task work here!
             else:
                 logger.info("no further work to be done")
                 raise NoResultError
@@ -495,7 +482,7 @@ async def check_for_updates(
             embed_fields=fields,
         )
 
-        await bobuild.run.ensure_vneditor_modpackages_config(
+        await bobuild.run.ensure_vneditor_config(
             rs2_config=rs2_config,
             mod_packages=["WW2"],
         )
@@ -874,6 +861,7 @@ Mercurial maps commit: {hg_maps_hash}.
             build_id=context.message.task_id,
             build_time_utc=utcnow(),
         )
+        return_value["WW2"] = ww2_sws_manifest
 
         # Include the manifest in the SWS content so the server can use them.
         dump_manifest(ww2_sws_manifest, ww2_content_folder / ww2_sws_manifest_out.name)
@@ -937,6 +925,7 @@ Mercurial maps commit: {hg_maps_hash}.
             map_manifest_in_sws_item_path = map_manifest_out_files[map_name].name
             # Include the manifest in the SWS item content so the server can use it.
             dump_manifest(manifest, map_sws_content_folders[map_name] / map_manifest_in_sws_item_path)
+            return_value[map_name] = manifest
 
         # map_future_errors = []
         # for map_name, map_future in map_manifest_futures.items():
@@ -998,6 +987,8 @@ Mercurial maps commit: {hg_maps_hash}.
         #   If there's a small number of warnings (less than 10),
         #   show them all. Otherwise generate a list of most common
         #   warnings and show top 10 warnings (and their counts).
+
+        return return_value
 
     except NoResultError:
         # No need to report anything in this case.
