@@ -653,7 +653,9 @@ async def main_task(
     pidfile_path.unlink(missing_ok=True)
 
     # TODO: update this list to ban broken maps.
-    blacklisted_map_names = []
+    blacklisted_map_names: list[str] = [
+        # "DRTE-Bardia",
+    ]
     ensure_server_config(rs2_config, blacklisted_map_names)
 
     # TODO: is it enough to download the binaries here? Do we need to
