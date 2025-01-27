@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     env:
-      VALGRIND_GIT_TAG: VALGRIND_3_23_0
+      VALGRIND_GIT_TAG: VALGRIND_3_24_0
       VALGRIND_PREFIX: ${{ github.workspace }}/valgrind/
       BO_VALGRIND_BIN: ${{ github.workspace }}/valgrind/bin/valgrind
 
