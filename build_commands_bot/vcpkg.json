@@ -1,0 +1,7 @@
+{
+  "dependencies": [
+    "spdlog"
+  ],
+  "name": "bo-build-commands-bot",
+  "version": "0.1.0"
+}

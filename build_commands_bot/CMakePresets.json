@@ -1,0 +1,157 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 29,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "config-base",
+      "hidden": true,
+      "displayName": "Base Config",
+      "description": "Common base configuration",
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+      "toolchainFile": "submodules/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "config-base-windows",
+      "inherits": "config-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_COMPILER": "cl.exe"
+      }
+    },
+    {
+      "name": "config-base-windows-debug",
+      "inherits": "config-base-windows",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict;/fsanitize=address;/Zi"
+      }
+    },
+    {
+      "name": "config-base-windows-release",
+      "inherits": "config-base-windows",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict"
+      }
+    },
+    {
+      "name": "config-base-windows-relwithdbg",
+      "inherits": "config-base-windows",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict"
+      }
+    },
+    {
+      "name": "config-base-linux",
+      "inherits": "config-base"
+    },
+    {
+      "name": "config-base-linux-debug-gcc",
+      "inherits": "config-base-linux",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BO_COMPILE_OPTIONS": "-fstack-protector;-Wall;-pedantic;-Wpedantic;-Wextra;-Wcast-align;-Wcast-qual;-Wctor-dtor-privacy;-Wdisabled-optimization;-Wformat=2;-Winit-self;-Wlogical-op;-Wmissing-declarations;-Wmissing-include-dirs;-Wnoexcept;-Wold-style-cast;-Woverloaded-virtual;-Wredundant-decls;-Wshadow;-Wsign-conversion;-Wsign-promo;-Wstrict-null-sentinel;-Wswitch-default;-Wundef;-Wno-unused;-fimplicit-constexpr;-fconcepts-diagnostics-depth=5;-fsanitize=address;",
+        "BO_LINKER_OPTIONS": "-fsanitize=address;-z no-exec-stack",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "config-base-linux-release-gcc",
+      "inherits": "config-base-linux",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BO_COMPILE_OPTIONS": "-fstack-protector;-Wall;-pedantic;-Wpedantic;-Wextra;-Wcast-align;-Wcast-qual;-Wctor-dtor-privacy;-Wdisabled-optimization;-Wformat=2;-Winit-self;-Wlogical-op;-Wmissing-declarations;-Wmissing-include-dirs;-Wnoexcept;-Wold-style-cast;-Woverloaded-virtual;-Wredundant-decls;-Wshadow;-Wsign-conversion;-Wsign-promo;-Wstrict-null-sentinel;-Wswitch-default;-Wundef;-Wno-unused;-fimplicit-constexpr;",
+        "BO_LINKER_OPTIONS": "-fsanitize=address",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "config-windows-debug-x64",
+      "displayName": "Windows Debug x64 configuration",
+      "inherits": "config-base-windows-debug",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}"
+    },
+    {
+      "name": "config-windows-release-x64",
+      "displayName": "Windows Release x64 configuration",
+      "inherits": "config-base-windows-release",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}"
+    },
+    {
+      "name": "config-windows-relwithdbg-x64",
+      "displayName": "Windows RelWithDbg x64 configuration",
+      "inherits": "config-base-windows-relwithdbg",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}"
+    },
+    {
+      "name": "config-linux-release-x64-gcc",
+      "displayName": "Linux Release x64 GCC configuration",
+      "inherits": "config-base-linux-release-gcc",
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}"
+    },
+    {
+      "name": "config-linux-debug-x64-gcc",
+      "displayName": "Linux Debug x64 GCC configuration",
+      "inherits": "config-base-linux-debug-gcc",
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-debug-x64",
+      "configurePreset": "config-windows-debug-x64",
+      "displayName": "Windows Debug x64"
+    },
+    {
+      "name": "windows-release-x64",
+      "configurePreset": "config-windows-release-x64",
+      "displayName": "Windows Release x64"
+    },
+    {
+      "name": "windows-relwithdbg-x64",
+      "configurePreset": "config-windows-relwithdbg-x64",
+      "displayName": "Windows RelWithDbg x64"
+    },
+    {
+      "name": "linux-release-x64-gcc",
+      "configurePreset": "config-linux-release-x64-gcc",
+      "displayName": "Linux Release x64 GCC"
+    },
+    {
+      "name": "linux-debug-x64-gcc",
+      "configurePreset": "config-linux-debug-x64-gcc",
+      "displayName": "Linux Debug x64 GCC"
+    }
+  ]
+}
