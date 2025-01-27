@@ -14,7 +14,7 @@ jobs:
         # TODO: 3.11 and 3.12 support disabled. See README.md.
         # python-version: [ "3.11", "3.12", "3.13" ]
         python-version: [ "3.13" ]
-        os: [ "ubuntu-latest", "windows-latest" ]
+        os: [ "ubuntu-24.04", "windows-latest" ]
 
     runs-on: ${{ matrix.os }}
 
