@@ -7,7 +7,7 @@ name = "bobuild"
 dynamic = ["version"]
 description = "Build tools for Black Orchestra."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 license-files = { paths = ["LICENSE"] }
 keywords = []
 authors = [
@@ -18,14 +18,15 @@ authors = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    # "Programming Language :: Python :: 3.11",
+    # "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 
 dependencies = [
     "Pillow==11.1.0",
+    "PyAutoGUI==0.9.54",
     "aiohttp[speedups]==3.11.11",
     "asyncpg==0.30.0",
     "audioop-lts==0.2.1; python_version >= '3.13'", # Needed by discord.py.
@@ -36,6 +37,7 @@ dependencies = [
     "hachiko @ git+https://git@github.com/tuokri/hachiko",
     "httpx==0.28.1",
     "loguru==0.7.3",
+    "opencv-python==4.11.0.86",
     "orjson==3.10.15",
     "psutil==6.1.1",
     "pywin32==308; platform_system == 'Windows'",
@@ -54,6 +56,7 @@ dev = [
     "isort",
     "mypy",
     "ruff",
+    "types-PyAutoGUI",
     "types-beautifulsoup4",
     "types-psutil",
     "types-pywin32",
@@ -76,6 +79,7 @@ dependencies = [
     "isort",
     "mypy",
     "ruff",
+    "types-PyAutoGUI",
     "types-beautifulsoup4",
     "types-psutil",
     "types-pywin32",
