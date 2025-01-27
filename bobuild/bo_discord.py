@@ -78,7 +78,7 @@ async def send_webhook(
             )
 
 
-async def main():
+async def main() -> None:
     ap = argparse.ArgumentParser()
     cfg = DiscordConfig()
 
