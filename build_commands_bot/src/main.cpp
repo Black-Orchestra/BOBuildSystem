@@ -1,5 +1,6 @@
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <format>
 #include <iostream>
@@ -22,7 +23,7 @@ namespace
 
 constexpr auto g_cmd_name_workshop_upload_beta = "workshop_upload_beta";
 
-constexpr auto g_bo_guild_id = 934252753339953173;
+constexpr std::uint64_t g_bo_guild_id = 934252753339953173;
 
 std::shared_ptr<spdlog::logger> g_logger;
 
@@ -56,11 +57,6 @@ std::string get_env_var(const std::string_view key)
 #endif // BO_WINDOWS
 }
 
-std::string get_bot_token()
-{
-    return get_env_var("BO_DISCORD_BUILD_COMMAND_BOT_TOKEN");
-}
-
 volatile std::sig_atomic_t g_signal_status = 0;
 
 } // namespace
@@ -87,7 +83,10 @@ void do_main()
     g_logger->set_level(default_log_level);
     g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e%z] [%n] [%^%l%$] [th#%t]: %v");
 
-    const auto bot_token = get_bot_token();
+    const auto redis_url = get_env_var("BO_REDIS_URL");
+    const auto postgres_url = get_env_var("BO_POSTGRES_URL");
+    const auto bot_token = get_env_var("BO_DISCORD_BUILD_COMMAND_BOT_TOKEN");
+
     g_bot = std::make_shared<dpp::cluster>(bot_token);
 
     g_bot->on_log(
@@ -122,20 +121,47 @@ void do_main()
         {
             if (event.command.get_command_name() == g_cmd_name_workshop_upload_beta)
             {
-
+                // TODO
             }
 
             co_return;
         });
 
     g_bot->on_ready(
-        [](const dpp::ready_t& event)
+        [](const dpp::ready_t& event) -> dpp::task<void>
         {
+            constexpr auto bo_guild = dpp::snowflake{g_bo_guild_id};
+            for (const auto& guild: event.guilds)
+            {
+                if (guild != bo_guild)
+                {
+                    std::string guild_name = "UNKNOWN GUILD NAME";
+
+                    const auto result = co_await event.owner->co_guild_get(guild);
+                    if (!result.is_error())
+                    {
+                        const auto guild_obj = result.get<dpp::guild>();
+                        guild_name = guild_obj.name;
+                    }
+                    else
+                    {
+                        g_logger->error("co_guild_get error: {}",
+                                        result.get_error().human_readable);
+                    }
+
+                    g_logger->info("leaving forbidden guild: {}: {}", guild.str(), guild_name);
+                    co_await event.owner->co_current_user_leave_guild(guild);
+                }
+            }
+
             if (dpp::run_once<struct register_bot_commands>())
             {
+                // TODO
             }
 
             g_logger->info("bot is ready and initialized");
+
+            co_return;
         });
 
     g_bot->start(dpp::st_return);
