@@ -1,0 +1,101 @@
+name: Build cmake project
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [ "debug", "release", "relwithdbg" ]
+        os: [ "ubuntu-24.04", "windows-2025" ]
+        exclude:
+          - os: "ubuntu-24.04"
+            build_type: "relwithdbg"
+        include:
+          - os: "ubuntu-24.04"
+            platform: "linux"
+          - os: "windows-2025"
+            platform: "windows"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Add Universe repository and check package availability
+        run: sudo add-apt-repository universe
+          && sudo apt update
+          && apt search gcc-14
+        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Install apt dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: autoconf-archive build-essential gcc-14 g++14 libc6-dbg
+          version: 1.1  # NOTE: this is cache version according to the docs.
+        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Cache Valgrind
+        uses: actions/cache@v4
+        id: cache-valgrind
+        if: matrix.os == 'ubuntu-24.04'
+        with:
+          path: ${{ env.VALGRIND_PREFIX }}
+          key: ${{ runner.os }}-cache-${{ env.VALGRIND_GIT_TAG }}
+          restore-keys: ${{ runner.os }}-cache-${{ env.VALGRIND_GIT_TAG }}
+
+      - name: Install Valgrind
+        if: ${{ (matrix.os == 'ubuntu-24.04') && (steps.cache-valgrind.outputs.cache-hit != 'true') }}
+        run: git clone https://sourceware.org/git/valgrind.git --depth 1 --branch ${{ env.VALGRIND_GIT_TAG }}
+          && cd valgrind
+          && ./autogen.sh
+          && ./configure --prefix=${{ env.VALGRIND_PREFIX }}
+          && make -j2
+          && make install
+
+      - name: Save installed Valgrind to cache
+        if: ${{ (matrix.os == 'ubuntu-24.04') && (steps.cache-valgrind.outputs.cache-hit != 'true') }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VALGRIND_PREFIX }}
+          key: ${{ runner.os }}-cache-${{ env.VALGRIND_GIT_TAG }}
+
+      - name: List installed gcc binaries
+        run: find /usr/bin/ -name "*gcc*"
+          && whereis gcc
+          && whereis g++
+          && whereis gcc-14
+          && whereis g++-14
+        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Set default GCC
+        run: sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 10
+          --slave /usr/bin/g++ g++ /usr/bin/g++-14
+        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Print GCC version
+        run: gcc --version
+        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.os == 'windows-latest'
+
+      - name: Print MSVC version
+        run: cl.exe
+        if: matrix.os == 'windows-latest'
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Build with CMake
+        run: |
+          cmake --preset config-${{ matrix.platform }}-${{ matrix.build_type }}-x64
+          cmake --build --preset ${{ matrix.platform }}-${{ matrix.build_type }}-x64
