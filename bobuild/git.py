@@ -121,9 +121,22 @@ async def fetch_repo(repo_path: Path) -> None:
     )
 
 
+async def checkout_repo(
+        repo_path: Path,
+        target: str,
+):
+    await run_cmd(
+        "checkout",
+        target,
+        cwd=repo_path,
+        raise_on_error=True,
+    )
+
+
 async def sync_repo(
         repo_path: Path,
         branch: str,
+        checkout_target: str | None = None,
 ):
     """WARNING: does a hard reset and clean!"""
     await fetch_repo(repo_path)
@@ -142,6 +155,8 @@ async def sync_repo(
         cwd=repo_path,
         raise_on_error=True,
     )
+    if checkout_target is not None:
+        await checkout_repo(repo_path, checkout_target)
 
 
 async def repo_has_update(repo_path: Path, branch: str) -> bool:
