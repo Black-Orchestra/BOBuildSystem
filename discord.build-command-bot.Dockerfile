@@ -42,7 +42,7 @@ COPY --chown=bot:bot build_commands_bot/CMakePresets.json ./build_commands_bot/C
 COPY --chown=bot:bot build_commands_bot/vcpkg.json ./build_commands_bot/vcpkg.json
 
 RUN bash ./build_commands_bot/submodules/vcpkg/bootstrap-vcpkg.sh -disableMetrics
-q
+
 WORKDIR /home/bot/build_commands_bot/
 
 RUN cmake --preset $CONFIGURE_TARGET \
