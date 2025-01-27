@@ -532,29 +532,29 @@ def install_workshop_item(
     for ini in inis:
         dst = config_dir / ini.name
         logger.info("{}: copy: '{}' -> '{}'", ini, dst, item_id)
-        shutil.copy(ini, cache_dir)
+        shutil.copyfile(ini, cache_dir)
     for int_ in ints:
         dst = localization_dir / "INT" / int_.name
         logger.info("{}: copy: '{}' -> '{}'", int_, dst, item_id)
-        shutil.copy(int_, cache_dir)
+        shutil.copyfile(int_, cache_dir)
 
     for u in item_dir.glob("*.u"):
         rel_path = u.relative_to(item_dir)
         dst = item_cache_dir / rel_path
         logger.info("{}: copy: '{}' -> '{}'", u, dst, item_id)
-        shutil.copy(u, cache_dir)
+        shutil.copyfile(u, cache_dir)
 
     for upk in item_dir.rglob("*.upk"):
         rel_path = upk.relative_to(item_dir)
         dst = item_cache_dir / rel_path
         logger.info("{}: copy: '{}' -> '{}'", upk, dst, item_id)
-        shutil.copy(upk, cache_dir)
+        shutil.copyfile(upk, cache_dir)
 
     for roe in item_dir.rglob("*.roe"):
         rel_path = roe.relative_to(item_dir)
         dst = item_cache_dir / rel_path
         logger.info("{}: copy: '{}' -> '{}'", roe, dst, item_id)
-        shutil.copy(roe, cache_dir)
+        shutil.copyfile(roe, cache_dir)
 
     logger.info("removing '{}'", item_dir)
     shutil.rmtree(item_dir, ignore_errors=True)
