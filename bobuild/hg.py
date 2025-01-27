@@ -97,9 +97,22 @@ async def clone_repo(url: str, path: Path):
     await run_cmd("clone", url, p, raise_on_error=True)
 
 
-async def sync(repo_path: Path) -> None:
+async def sync(
+        repo_path: Path,
+        update_revision: str | None = None,
+) -> None:
     await run_cmd("pull", cwd=repo_path, raise_on_error=True)
-    await run_cmd("update", "--clean", cwd=repo_path, raise_on_error=True)
+    update_args = [
+        "update",
+        "--clean",
+    ]
+    if update_revision is not None:
+        update_args.extend(["--rev", update_revision])
+    await run_cmd(
+        *update_args,
+        cwd=repo_path,
+        raise_on_error=True
+    )
 
 
 async def get_local_hash(repo_path: Path) -> str:
