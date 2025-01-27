@@ -101,3 +101,20 @@ order_by_type = false
 extend_skip = [
     "_version.py"
 ]
+
+[tool.mypy]
+exclude = [
+    "submodules/",
+    "build_commands_bot/",
+]
+
+# https://github.com/MagicStack/asyncpg/pull/577
+# https://github.com/MagicStack/asyncpg/issues/387
+[[tool.mypy.overrides]]
+module = [
+    "asyncpg.*",
+    "boltons.*",
+    "pygetwindow.*",
+    "vdf.*",
+]
+ignore_missing_imports = true
