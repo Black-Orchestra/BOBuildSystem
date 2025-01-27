@@ -1,7 +1,6 @@
 [submodule "build_commands_bot/submodules/vcpkg"]
 	path = build_commands_bot/submodules/vcpkg
-	url = git@github.com:microsoft/vcpkg.git
-
+	url = https://github.com/microsoft/vcpkg.git
 [submodule "build_commands_bot/submodules/dpp"]
 	path = build_commands_bot/submodules/dpp
-	url = git@github.com:brainboxdotcc/DPP.git
+	url = https://github.com/brainboxdotcc/DPP.git
