@@ -14,7 +14,7 @@ services:
     restart: on-failure
     networks:
       - task-network
-    container_name: bo_redis_stack
+    container_name: bo-redis-stack
 
 volumes:
   redis_data:
@@ -22,4 +22,4 @@ volumes:
 networks:
   task-network:
     driver: bridge
-    name: redis_task_network
+    name: redis-task-network

@@ -1,10 +1,10 @@
 services:
   scheduler:
-    image: bo/task-scheduler
+    image: bo/discord-build-command-bot
     build:
       context: ../../
-      dockerfile: tasks.scheduler.Dockerfile
-    container_name: bo-task-scheduler
+      dockerfile: discord.build-command-bot.Dockerfile
+    container_name: bo-discord-build-command-bot
     networks:
       - redis-stack-task-network
     restart: always
@@ -12,7 +12,7 @@ services:
       BO_REDIS_URL: ${BO_REDIS_URL}
       BO_REDIS_HOSTNAME: bo_redis_stack
       BO_TASK_SCHEDULER: 1
-      BO_LOG_FILE: bobuild_scheduler.log
+      BO_LOG_FILE: bobuild_discord_build_command_bot.log
 
 networks:
   redis-stack-task-network:
