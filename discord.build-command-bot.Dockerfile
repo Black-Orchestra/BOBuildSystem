@@ -3,9 +3,15 @@ FROM debian:bookworm-slim AS builder
 ARG CONFIGURE_TARGET="config-linux-release-x64-gcc"
 ARG BUILD_TARGET="linux-release-x64-gcc"
 
-RUN apt -y update \
-    && apt install -y --no-install-recommends \
+COPY ./docker/apt_lists/stable.list /etc/apt/sources.list.d/stable.list
+COPY ./docker/apt_lists/testing.list /etc/apt/sources.list.d/testing.list
+
+RUN echo "APT::Default-Release "stable";" >> /etc/apt/apt.conf.d/99defaultrelease \
+    && apt -y update \
+    && apt install -y --no-install-recommends -t testing \
     build-essential \
+    gcc-14 \
+    && apt install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
