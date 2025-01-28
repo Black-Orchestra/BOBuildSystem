@@ -24,8 +24,10 @@ jobs:
         include:
           - os: "ubuntu-24.04"
             platform: "linux"
+            preset_prefix: "-gcc"
           - os: "windows-2025"
             platform: "windows"
+            preset_prefix: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -100,8 +102,9 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@master
 
+      # TODO: is there a better way to do this preset selection?
       - name: Build with CMake
         working-directory: ${{ github.workspace }}/build_commands_bot
         run: |
-          cmake --preset config-${{ matrix.platform }}-${{ matrix.build_type }}-x64
-          cmake --build --preset ${{ matrix.platform }}-${{ matrix.build_type }}-x64
+          cmake --preset config-${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
+          cmake --build --preset ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
