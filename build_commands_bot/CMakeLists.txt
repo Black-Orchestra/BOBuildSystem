@@ -14,6 +14,7 @@ endif ()
 
 find_package(
     spdlog
+    CONFIG
     REQUIRED
 )
 
