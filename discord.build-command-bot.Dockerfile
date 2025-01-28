@@ -66,15 +66,15 @@ USER bot
 WORKDIR /home/bot/
 
 COPY --from=builder --chown=bot:bot \
-    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/build_commands_bot \
+    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/src/build_commands_bot \
     /home/bot/build_commands_bot
 
 COPY --from=builder --chown=bot:bot \
-    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/*.so \
+    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/**/*.so* \
     /home/bot/
 
 COPY --from=builder --chown=bot:bot \
-    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/*.a \
+    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/**/*.a* \
     /home/bot/
 
 ENTRYPOINT ["./build_commands_bot"]
