@@ -1,5 +1,6 @@
 FROM debian:bookworm-slim AS builder
 
+ARG VCPKG_BINARY_SOURCES=""
 ARG CONFIGURE_TARGET="config-linux-release-x64-gcc"
 ARG BUILD_TARGET="linux-release-x64-gcc"
 
