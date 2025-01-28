@@ -114,5 +114,9 @@ jobs:
       - name: Build with CMake
         working-directory: ${{ github.workspace }}/build_commands_bot
         run: |
-          cmake --preset config-${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
-          cmake --build --preset ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
+          cmake "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --preset \
+            config-${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }} \
+            -DCMAKE_GENERATOR=
+          cmake "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --build --preset \ 
+            ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }} \
+            -DCMAKE_GENERATOR=
