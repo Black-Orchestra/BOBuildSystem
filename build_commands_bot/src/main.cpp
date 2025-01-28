@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <format>
 #include <iostream>
+#include <string_view>
 
 #include <dpp/dpp.h>
 
@@ -11,6 +12,8 @@
 #include <spdlog/async.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
+
+#include "taskiq.hpp"
 
 namespace
 {
@@ -21,7 +24,19 @@ namespace
 #define BO_WINDOWS 0
 #endif
 
-constexpr auto g_cmd_name_workshop_upload_beta = "workshop_upload_beta";
+constexpr auto g_cmd_name_sws_upload_beta = "workshop_upload_beta";
+constexpr auto g_cmd_name_sws_get_info = "workshop_info";
+
+constexpr auto g_desc_max_len = 100U;
+constexpr auto g_cmd_desc_sws_upload_beta
+    = "Tag the latest of commit of each repo and upload content to BO Beta Steam Workshop";
+constexpr auto g_cmd_desc_sws_get_info
+    = "Display metadata of current latest Workshop upload.";
+
+static_assert(std::string_view{g_cmd_desc_sws_upload_beta}.size() <= g_desc_max_len,
+              "g_cmd_desc_sws_upload_beta too long");
+static_assert(std::string_view{g_cmd_desc_sws_get_info}.size() <= g_desc_max_len,
+              "g_cmd_desc_sws_get_info too long");
 
 constexpr std::uint64_t g_bo_guild_id = 934252753339953173;
 
@@ -119,9 +134,26 @@ void do_main()
     g_bot->on_slashcommand(
         [](const dpp::slashcommand_t& event) -> dpp::task<void>
         {
-            if (event.command.get_command_name() == g_cmd_name_workshop_upload_beta)
+            const auto cmd_name = event.command.get_command_name();
+
+            if (cmd_name == g_cmd_name_sws_upload_beta)
             {
-                // TODO
+                // TODO:
+                // - Check if current tag exists in repos.
+                //   - Git repo: libgit2. (TODO: this might be too cumbersome!)
+                //   - Hg repos: asio process.
+                //   - If exists already IN ANY -> error.
+                // - Tag it in all repos.
+                // - Fire off taskiq task!
+                //   - Publish it to redis.
+            }
+            else if (cmd_name == g_cmd_name_sws_get_info)
+            {
+                g_logger->info("fetching SWS metadata");
+            }
+            else
+            {
+                g_logger->error("unknown command: {}", cmd_name);
             }
 
             co_return;
@@ -156,7 +188,17 @@ void do_main()
 
             if (dpp::run_once<struct register_bot_commands>())
             {
-                // TODO
+                dpp::slashcommand sws_upload_cmd{
+                    g_cmd_name_sws_upload_beta, g_cmd_desc_sws_upload_beta, g_bot->me.id};
+                dpp::slashcommand sws_get_info{
+                    g_cmd_name_sws_get_info, g_cmd_desc_sws_get_info, g_bot->me.id};
+
+                g_bot->guild_bulk_command_create(
+                    {
+                        sws_upload_cmd,
+                        sws_get_info,
+                    },
+                    g_bo_guild_id);
             }
 
             g_logger->info("bot is ready and initialized");
