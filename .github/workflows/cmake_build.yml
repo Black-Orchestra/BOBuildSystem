@@ -101,6 +101,7 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@master
 
       - name: Build with CMake
+        working-directory: ${{ github.workspace }}/build_commands_bot
         run: |
           cmake --preset config-${{ matrix.platform }}-${{ matrix.build_type }}-x64
           cmake --build --preset ${{ matrix.platform }}-${{ matrix.build_type }}-x64
