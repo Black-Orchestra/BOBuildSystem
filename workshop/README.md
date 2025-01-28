@@ -1,3 +1,7 @@
-# TODO: DOCUMENT THIS!
+# Workshop item generation tools
 
-# TODO: NEED TO USE STEAMGUARD!
+- Automatic rendering of Workshop images for maps.
+
+## TODO:
+
+- Document this more!
