@@ -61,6 +61,12 @@ jobs:
           version: 1.1  # NOTE: this is cache version according to the docs.
         if: matrix.os == 'ubuntu-24.04'
 
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+        with:
+          version: 1.21.1
+        if: matrix.os == 'ubuntu-24.04'
+
       - name: Cache Valgrind
         uses: actions/cache@v4
         id: cache-valgrind
@@ -110,9 +116,6 @@ jobs:
       - name: Print MSVC version
         run: cl.exe
         if: matrix.os == 'windows-2025'
-
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@master
 
       - name: Configure CMake
         working-directory: ${{ github.workspace }}/build_commands_bot
