@@ -53,3 +53,28 @@ WORKDIR /home/bot/build_commands_bot/
 
 RUN cmake --preset $CONFIGURE_TARGET \
     && cmake --build --preset $BUILD_TARGET
+
+FROM debian:bookworm-slim
+
+ARG CONFIGURE_TARGET="config-linux-release-x64-gcc"
+
+RUN groupadd bot
+RUN useradd --system --create-home --shell /bin/bash --gid bot bot
+RUN chown -R bot:bot /home/bot/
+
+USER bot
+WORKDIR /home/bot/
+
+COPY --from=builder --chown=bot:bot \
+    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/build_commands_bot \
+    /home/bot/build_commands_bot
+
+COPY --from=builder --chown=bot:bot \
+    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/*.so \
+    /home/bot/
+
+COPY --from=builder --chown=bot:bot \
+    /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/*.a \
+    /home/bot/
+
+ENTRYPOINT ["./build_commands_bot"]
