@@ -1,6 +1,8 @@
 FROM debian:bookworm-slim AS builder
 
+ARG ACTIONS_CACHE_URL=""
 ARG VCPKG_BINARY_SOURCES=""
+ARG ACTIONS_RUNTIME_TOKEN=""
 ARG CONFIGURE_TARGET="config-linux-release-x64-gcc"
 ARG BUILD_TARGET="linux-release-x64-gcc"
 
