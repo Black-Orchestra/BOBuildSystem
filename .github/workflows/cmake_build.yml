@@ -25,9 +25,13 @@ jobs:
           - os: "ubuntu-24.04"
             platform: "linux"
             preset_prefix: "-gcc"
+            cmake_generator: Ninja
+            cmake_extra_args: ""
           - os: "windows-2025"
             platform: "windows"
             preset_prefix: ""
+            cmake_generator: Visual Studio 17 2022
+            cmake_extra_args: -A x64
 
     runs-on: ${{ matrix.os }}
 
@@ -47,6 +51,10 @@ jobs:
         with:
           packages: autoconf-archive build-essential gcc-14 g++14 libc6-dbg
           version: 1.1  # NOTE: this is cache version according to the docs.
+        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
         if: matrix.os == 'ubuntu-24.04'
 
       - name: Cache Valgrind
