@@ -35,7 +35,8 @@
       "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "BO_COMPILE_OPTIONS": "/W4;/await:strict;/fsanitize=address;/Zi"
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict;/fsanitize=address;/Zi",
+        "BO_LINKER_OPTIONS": ""
       }
     },
     {
@@ -44,7 +45,8 @@
       "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "BO_COMPILE_OPTIONS": "/W4;/await:strict"
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict",
+        "BO_LINKER_OPTIONS": ""
       }
     },
     {
@@ -53,7 +55,8 @@
       "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "BO_COMPILE_OPTIONS": "/W4;/await:strict"
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict",
+        "BO_LINKER_OPTIONS": ""
       }
     },
     {
