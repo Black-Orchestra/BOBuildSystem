@@ -26,7 +26,7 @@ jobs:
             platform: "linux"
             preset_prefix: "-gcc"
             cmake_generator: Ninja
-            cmake_extra_args: ""
+            # cmake_extra_args: ""
           - os: "windows-2025"
             platform: "windows"
             preset_prefix: ""
@@ -117,5 +117,4 @@ jobs:
 
       - name: Build with CMake
         working-directory: ${{ github.workspace }}/build_commands_bot
-        run: cmake -G "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --build --preset
-          ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
+        run: cmake --build --preset ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
