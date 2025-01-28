@@ -110,13 +110,12 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@master
 
-      # TODO: is there a better way to do this preset selection?
+      - name: Configure CMake
+        working-directory: ${{ github.workspace }}/build_commands_bot
+        run: cmake -G "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --preset
+          config-${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
+
       - name: Build with CMake
         working-directory: ${{ github.workspace }}/build_commands_bot
-        run: |
-          cmake -G "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --preset
-            config-${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
-            -DCMAKE_GENERATOR=
-          cmake -G "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --build --preset
-            ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
-            -DCMAKE_GENERATOR=
+        run: cmake -G "${{ matrix.cmake_generator }}" ${{ env.cmake_extra_args }} --build --preset
+          ${{ matrix.platform }}-${{ matrix.build_type }}-x64${{ matrix.preset_prefix }}
