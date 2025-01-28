@@ -38,3 +38,9 @@ target_compile_definitions(
     PUBLIC
     DPP_CORO
 )
+
+target_include_directories(
+    build_commands_bot
+    PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
