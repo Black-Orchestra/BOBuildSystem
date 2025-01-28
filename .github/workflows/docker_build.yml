@@ -37,6 +37,8 @@ jobs:
           file: tasks.scheduler.Dockerfile
           build-args: |
             VCPKG_BINARY_SOURCES=${{ env.VCPKG_BINARY_SOURCES }}
+            ACTIONS_CACHE_URL=${{ env.ACTIONS_CACHE_URL }}
+            ACTIONS_RUNTIME_TOKEN=${{ env.ACTIONS_RUNTIME_TOKEN }}
 
       - name: Build discord.build-command-bot.Dockerfile
         uses: docker/build-push-action@v6
@@ -47,3 +49,5 @@ jobs:
           file: discord.build-command-bot.Dockerfile
           build-args: |
             VCPKG_BINARY_SOURCES=${{ env.VCPKG_BINARY_SOURCES }}
+            ACTIONS_CACHE_URL=${{ env.ACTIONS_CACHE_URL }}
+            ACTIONS_RUNTIME_TOKEN=${{ env.ACTIONS_RUNTIME_TOKEN }}
