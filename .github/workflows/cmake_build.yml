@@ -93,11 +93,11 @@ jobs:
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2025'
 
       - name: Print MSVC version
         run: cl.exe
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2025'
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@master
