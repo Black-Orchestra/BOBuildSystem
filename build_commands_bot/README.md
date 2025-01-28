@@ -43,3 +43,8 @@ Configure and build a preset:
 cmake --preset config-windows-debug-x64
 cmake --build --preset windows-debug-x64
 ```
+
+## Development TODOs
+
+- Improve CI build speeds with caching?
+- For Docker image, do we need `-Wl,-rpath,'$ORIGIN'`?
