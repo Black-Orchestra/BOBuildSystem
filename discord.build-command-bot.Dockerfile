@@ -15,6 +15,7 @@ RUN echo "APT::Default-Release "stable";" >> /etc/apt/apt.conf.d/99defaultreleas
     build-essential \
     gcc-14 \
     mold \
+    ninja-build \
     && apt install -y --no-install-recommends \
     ca-certificates \
     curl \
