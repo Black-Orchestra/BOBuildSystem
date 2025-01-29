@@ -7,5 +7,6 @@ set(DPP_CORO ON)
 set(DPP_FORMATTERS ON)
 set(DPP_NO_CONAN ON)
 set(DPP_USE_PCH ON)
+set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory("${CMAKE_SOURCE_DIR}/submodules/dpp")
