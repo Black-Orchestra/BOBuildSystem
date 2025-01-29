@@ -63,10 +63,7 @@
       "name": "config-base-linux",
       "inherits": "config-base",
       "hidden": true,
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "make"
-      }
+      "generator": "Ninja"
     },
     {
       "name": "config-base-linux-debug-gcc",
