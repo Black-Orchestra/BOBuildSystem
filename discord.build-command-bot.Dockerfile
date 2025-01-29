@@ -84,4 +84,6 @@ COPY --from=builder --chown=bot:bot \
     /home/bot/build_commands_bot/cmake-build-$CONFIGURE_TARGET/**/*.a* \
     /home/bot/
 
+RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/bot/
+
 ENTRYPOINT ["./build_commands_bot"]
