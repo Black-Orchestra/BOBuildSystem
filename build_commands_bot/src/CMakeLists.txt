@@ -3,10 +3,13 @@ add_executable(
     main.cpp
 )
 
-set_property(
-    TARGET build_commands_bot
-    PROPERTY INTERPROCEDURAL_OPTIMIZATION ${BO_IPO_SUPPORTED}
-)
+if (${BO_IPO_SUPPORTED})
+    message(STATUS "Enabling IPO/LTO for build_commands_bot")
+    set_property(
+        TARGET build_commands_bot
+        PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE
+    )
+endif ()
 
 target_compile_features(
     build_commands_bot
