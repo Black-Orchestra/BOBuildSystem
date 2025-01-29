@@ -65,7 +65,7 @@
       "hidden": true,
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "gmake"
+        "CMAKE_MAKE_PROGRAM": "make"
       }
     },
     {
