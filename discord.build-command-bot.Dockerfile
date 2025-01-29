@@ -14,6 +14,7 @@ RUN echo "APT::Default-Release "stable";" >> /etc/apt/apt.conf.d/99defaultreleas
     && apt install -y --no-install-recommends -t testing \
     build-essential \
     gcc-14 \
+    mold \
     && apt install -y --no-install-recommends \
     ca-certificates \
     curl \
