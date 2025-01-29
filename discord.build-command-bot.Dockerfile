@@ -52,13 +52,12 @@ COPY --chown=bot:bot build_commands_bot/CMakePresets.json ./build_commands_bot/C
 COPY --chown=bot:bot build_commands_bot/vcpkg.json ./build_commands_bot/vcpkg.json
 
 RUN --mount=type=secret,id=ACTIONS_RUNTIME_TOKEN,env=ACTIONS_RUNTIME_TOKEN \
-    && export ACTIONS_RUNTIME_TOKEN=$ACTIONS_RUNTIME_TOKEN \
-    && bash ./build_commands_bot/submodules/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+    bash ./build_commands_bot/submodules/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
 WORKDIR /home/bot/build_commands_bot/
 
 RUN --mount=type=secret,id=ACTIONS_RUNTIME_TOKEN,env=ACTIONS_RUNTIME_TOKEN \
-    && cmake --preset $CONFIGURE_TARGET \
+    cmake --preset $CONFIGURE_TARGET \
     && cmake --build --preset $BUILD_TARGET
 
 FROM debian:bookworm-slim
