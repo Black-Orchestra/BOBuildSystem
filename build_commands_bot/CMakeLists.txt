@@ -4,9 +4,7 @@ project(build_commands_bot)
 set(CMAKE_CXX_STANDARD 23)
 
 include(CheckIPOSupported)
-# TODO: this is disabled temporarily!
-set(BO_IPO_SUPPORTED 0)
-# check_ipo_supported(RESULT BO_IPO_SUPPORTED OUTPUT BO_IPO_ERROR)
+check_ipo_supported(RESULT BO_IPO_SUPPORTED OUTPUT BO_IPO_ERROR)
 
 if (BO_IPO_SUPPORTED)
     message(STATUS "IPO / LTO enabled: ${BO_IPO_SUPPORTED}")
@@ -21,7 +19,7 @@ find_package(
 )
 
 if (WIN32)
-    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    # set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 endif ()
