@@ -4,6 +4,7 @@ ARG ACTIONS_CACHE_URL=""
 ARG VCPKG_BINARY_SOURCES=""
 ARG CONFIGURE_TARGET="config-linux-release-x64-gcc"
 ARG BUILD_TARGET="linux-release-x64-gcc"
+ARG CMAKE_SHA256="84791d2675054aa167f14008ba3e41dd599d695c0a8fcc7eb8bcf50006d33938"
 
 COPY ./docker/apt_lists/stable.list /etc/apt/sources.list.d/stable.list
 COPY ./docker/apt_lists/testing.list /etc/apt/sources.list.d/testing.list
@@ -32,6 +33,7 @@ RUN echo "APT::Default-Release "stable";" >> /etc/apt/apt.conf.d/99defaultreleas
 RUN export CMAKE_MAKE_PROGRAM=make \
     && wget https://github.com/Kitware/CMake/releases/download/v3.31.4/cmake-3.31.4-linux-x86_64.sh \
     -O cmake.sh \
+    && echo "${CMAKE_SHA256} ./cmake.sh" | sha256sum --check --status \
     && /bin/sh ./cmake.sh --skip-license --prefix=/usr/local
 
 RUN groupadd bot
