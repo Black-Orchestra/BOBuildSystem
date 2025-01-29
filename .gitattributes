@@ -1,4 +1,5 @@
 *.sql linguist-detectable=true
 *.sql linguist-language=PLpgSQL
 
-task_scheduler.sh eol=lf
+./docker/task_scheduler.sh eol=lf
+./docker/build_commands_bot.sh eol=lf
