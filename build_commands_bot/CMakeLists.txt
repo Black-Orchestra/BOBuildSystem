@@ -4,7 +4,9 @@ project(build_commands_bot)
 set(CMAKE_CXX_STANDARD 23)
 
 include(CheckIPOSupported)
-check_ipo_supported(RESULT BO_IPO_SUPPORTED OUTPUT BO_IPO_ERROR)
+# TODO: this is disabled temporarily!
+set(BO_IPO_SUPPORTED 0)
+# check_ipo_supported(RESULT BO_IPO_SUPPORTED OUTPUT BO_IPO_ERROR)
 
 if (BO_IPO_SUPPORTED)
     message(STATUS "IPO / LTO enabled: ${BO_IPO_SUPPORTED}")
