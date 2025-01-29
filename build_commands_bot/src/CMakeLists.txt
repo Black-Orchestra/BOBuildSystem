@@ -22,7 +22,7 @@ target_compile_options(
 
 target_link_options(
     build_commands_bot
-    PRIVATE
+    PUBLIC
     ${BO_LINKER_OPTIONS}
 )
 
