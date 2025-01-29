@@ -2,7 +2,6 @@ FROM debian:bookworm-slim AS builder
 
 ARG ACTIONS_CACHE_URL=""
 ARG VCPKG_BINARY_SOURCES=""
-ARG ACTIONS_RUNTIME_TOKEN=""
 ARG CONFIGURE_TARGET="config-linux-release-x64-gcc"
 ARG BUILD_TARGET="linux-release-x64-gcc"
 
@@ -52,11 +51,14 @@ COPY --chown=bot:bot build_commands_bot/CMakeLists.txt ./build_commands_bot/CMak
 COPY --chown=bot:bot build_commands_bot/CMakePresets.json ./build_commands_bot/CMakePresets.json
 COPY --chown=bot:bot build_commands_bot/vcpkg.json ./build_commands_bot/vcpkg.json
 
-RUN bash ./build_commands_bot/submodules/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+RUN --mount=type=secret,id=ACTIONS_RUNTIME_TOKEN,env=ACTIONS_RUNTIME_TOKEN \
+    && export ACTIONS_RUNTIME_TOKEN=$ACTIONS_RUNTIME_TOKEN \
+    && bash ./build_commands_bot/submodules/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
 WORKDIR /home/bot/build_commands_bot/
 
-RUN cmake --preset $CONFIGURE_TARGET \
+RUN --mount=type=secret,id=ACTIONS_RUNTIME_TOKEN,env=ACTIONS_RUNTIME_TOKEN \
+    && cmake --preset $CONFIGURE_TARGET \
     && cmake --build --preset $BUILD_TARGET
 
 FROM debian:bookworm-slim

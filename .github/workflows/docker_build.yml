@@ -38,6 +38,7 @@ jobs:
           build-args: |
             VCPKG_BINARY_SOURCES=${{ env.VCPKG_BINARY_SOURCES }}
             ACTIONS_CACHE_URL=${{ env.ACTIONS_CACHE_URL }}
+          secret-envs: |
             ACTIONS_RUNTIME_TOKEN=${{ env.ACTIONS_RUNTIME_TOKEN }}
 
       - name: Build discord.build-command-bot.Dockerfile
@@ -50,4 +51,5 @@ jobs:
           build-args: |
             VCPKG_BINARY_SOURCES=${{ env.VCPKG_BINARY_SOURCES }}
             ACTIONS_CACHE_URL=${{ env.ACTIONS_CACHE_URL }}
+          secret-envs: |
             ACTIONS_RUNTIME_TOKEN=${{ env.ACTIONS_RUNTIME_TOKEN }}
