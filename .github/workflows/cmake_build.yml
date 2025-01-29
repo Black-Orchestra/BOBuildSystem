@@ -69,7 +69,9 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@master
         with:
           version: 1.12.1
-        if: matrix.os == 'ubuntu-24.04'
+
+      - name: Print Ninja version
+        run: ninja --version
 
       - name: Cache Valgrind
         uses: actions/cache@v4
