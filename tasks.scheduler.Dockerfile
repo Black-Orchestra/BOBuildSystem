@@ -43,7 +43,7 @@ RUN chown -R scheduler:scheduler /home/scheduler/
 USER scheduler
 WORKDIR /home/scheduler/
 
-COPY --chown=scheduler:scheduler task_scheduler.sh .
+COPY --chown=scheduler:scheduler ./docker/task_scheduler.sh .
 COPY --from=builder --chown=scheduler:scheduler /home/scheduler/dist/ ./dist/
 
 RUN pip install --upgrade pip --no-cache-dir \
