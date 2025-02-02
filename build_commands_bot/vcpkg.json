@@ -4,7 +4,9 @@
     "boost-cobalt",
     "boost-process",
     "boost-redis",
+    "boost-system",
     "glaze",
+    "openssl",
     "spdlog"
   ],
   "name": "bo-build-commands-bot",
