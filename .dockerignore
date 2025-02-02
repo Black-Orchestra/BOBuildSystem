@@ -9,6 +9,7 @@
 # Docker
 docker-compose.yml
 Dockerfile
+*.Dockerfile
 .docker
 .dockerignore
 
@@ -72,8 +73,9 @@ target/
 .venv/
 venv/
 
-# PyCharm
+# JetBrains
 .idea
+**/.idea
 
 # Python mode for VIM
 .ropeproject
@@ -84,3 +86,30 @@ venv/
 
 # VS Code
 .vscode/
+
+# CMake build preset build dirs
+cmake-build-*/
+
+.github/
+
+*.a
+
+logs/
+
+setup/
+setup.ps1
+setup.sh
+
+workshop/
+
+.mypy_cache/
+
+.ruff_cache/
+ruff.toml
+
+bin/
+
+# TODO: large build context if these are included.
+# TODO: including these does speed up image build time, though?
+# build_commands_bot/submodules/vcpkg/buildtrees
+# build_commands_bot/submodules/vcpkg/downloads
