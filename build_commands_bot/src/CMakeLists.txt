@@ -32,7 +32,12 @@ target_link_options(
 target_link_libraries(
     build_commands_bot
     PRIVATE
+    Boost::asio
+    Boost::cobalt
+    Boost::process
+    Boost::system
     dpp
+    glaze::glaze
     spdlog::spdlog
 )
 

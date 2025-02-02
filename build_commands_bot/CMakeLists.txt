@@ -18,8 +18,23 @@ find_package(
     REQUIRED
 )
 
+find_package(
+    glaze
+    CONFIG
+    REQUIRED
+)
+
+find_package(
+    Boost
+    CONFIG
+    REQUIRED
+    COMPONENTS
+    asio
+    cobalt
+    process
+)
+
 if (WIN32)
-    # set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 endif ()
