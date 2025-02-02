@@ -1,8 +1,10 @@
 {
   "dependencies": [
     "boost-asio",
+    "boost-cobalt",
     "boost-process",
     "boost-redis",
+    "glaze",
     "spdlog"
   ],
   "name": "bo-build-commands-bot",
