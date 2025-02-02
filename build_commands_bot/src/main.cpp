@@ -4,7 +4,31 @@
 #include <cstdlib>
 #include <format>
 #include <iostream>
+#include <memory>
 #include <string_view>
+#include <thread>
+
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+#define BO_WINDOWS 1
+
+#include <SDKDDKVer.h> // Silence "Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately".
+
+#else
+#define BO_WINDOWS 0
+#endif
+
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/cobalt.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/use_future.hpp>
+#include <boost/asio/experimental/concurrent_channel.hpp>
+// #include <boost/asio/experimental/use_promise.hpp> TODO: even including this errors?
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/signal_set.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/redis/config.hpp>
 
 #include <dpp/dpp.h>
 
@@ -18,11 +42,22 @@
 namespace
 {
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
-#define BO_WINDOWS 1
-#else
-#define BO_WINDOWS 0
-#endif
+namespace chrono = std::chrono;
+namespace asio = boost::asio;
+namespace redis = boost::redis;
+namespace cobalt = boost::cobalt;
+
+using boost::asio::experimental::concurrent_channel;
+
+enum class MessageType: std::uint8_t
+{
+    WorkshopUploadBeta,
+};
+
+// TODO: include explicit executor type here?
+// TODO: currently this channel only send/receives the message type as
+//   our messages are always the same and we don't need any argument handling.
+using MessageChannel = concurrent_channel<void(boost::system::error_code, MessageType)>;
 
 constexpr auto g_cmd_name_sws_upload_beta = "workshop_upload_beta";
 constexpr auto g_cmd_name_sws_get_info = "workshop_info";
@@ -43,6 +78,27 @@ constexpr std::uint64_t g_bo_guild_id = 934252753339953173;
 std::shared_ptr<spdlog::logger> g_logger;
 
 std::shared_ptr<dpp::cluster> g_bot;
+
+#ifndef NDEBUG
+
+bool debugger_present()
+{
+#if BO_WINDOWS
+    return IsDebuggerPresent();
+#else
+    // TODO: Linux version?
+    return false;
+#endif // BO_WINDOWS
+}
+
+#else
+
+constexpr bool debugger_present()
+{
+    return false;
+}
+
+#endif // NDEBUG
 
 std::string get_env_var(const std::string_view key)
 {
@@ -72,32 +128,75 @@ std::string get_env_var(const std::string_view key)
 #endif // BO_WINDOWS
 }
 
-volatile std::sig_atomic_t g_signal_status = 0;
-
-} // namespace
-
-void signal_handler(int signal)
+auto send_workshop_upload_beta_msg(
+    std::shared_ptr<MessageChannel> msg_channel
+) -> asio::awaitable<int>
 {
-    g_signal_status = signal;
+    g_logger->info("send_workshop_upload_beta_msg running in asio::awaitable");
+
+    co_await msg_channel->async_send(
+        boost::system::error_code{},
+        MessageType::WorkshopUploadBeta,
+        asio::use_awaitable);
+
+    co_return 1;
 }
 
-void do_main()
+// TODO: THIS IS THE RIGHT WAY TO CO-OP DPP AND ASIO/COBALT!
+auto send_workshop_upload_beta_msg_cobalt(
+    std::shared_ptr<MessageChannel> msg_channel
+) -> cobalt::task<int>
 {
-    constexpr auto default_log_level = spdlog::level::info;
+    // 1. Check if task lock exists.
 
-    spdlog::init_thread_pool(8192, 2);
-    constexpr auto max_log_size = 1024 * 1024 * 10;
-    auto stdout_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    auto rotating_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-        "bo_build_commands_bot.log", max_log_size, 3);
-    const auto sinks = std::vector<spdlog::sink_ptr>{stdout_sink, rotating_sink};
-    g_logger = std::make_shared<spdlog::async_logger>(
-        "bo_build_commands_bot", sinks.cbegin(), sinks.cend(), spdlog::thread_pool(),
-        spdlog::async_overflow_policy::overrun_oldest);
-    spdlog::register_logger(g_logger);
-    g_logger->set_level(default_log_level);
-    g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e%z] [%n] [%^%l%$] [th#%t]: %v");
+    g_logger->info("send_workshop_upload_beta_msg running in cobalt::task");
+    // auto exec = co_await cobalt::this_coro::executor;
 
+    co_await msg_channel->async_send(
+        boost::system::error_code{},
+        MessageType::WorkshopUploadBeta,
+        cobalt::use_op
+    );
+
+    g_logger->info("sent");
+
+    asio::steady_timer test_timer{msg_channel->get_executor()};
+    test_timer.expires_after(chrono::seconds(10));
+    co_await test_timer.async_wait();
+
+    co_return 1;
+}
+
+auto workshop_upload_beta_task(
+    std::shared_ptr<MessageChannel> msg_channel
+) -> dpp::task<int>
+{
+    g_logger->info("workshop_upload_beta_task running in dpp::task");
+
+    // Offload work to ASIO thread.
+    auto deferred_op = asio::co_spawn(
+        msg_channel->get_executor(),
+        send_workshop_upload_beta_msg(msg_channel),
+        asio::deferred);
+
+    auto future = std::move(deferred_op)(asio::use_future);
+
+    asio::steady_timer test_timer{msg_channel->get_executor()};
+    test_timer.expires_after(chrono::seconds(5));
+    test_timer.async_wait();
+
+    const int result = future.get();
+    co_return result;
+}
+
+auto cobalt_task_test() -> cobalt::task<void>
+{
+    g_logger->info("cobalt_task_test running in cobalt::task");
+    co_return;
+}
+
+void bot_main(std::shared_ptr<MessageChannel> msg_channel)
+{
     const auto redis_url = get_env_var("BO_REDIS_URL");
     const auto postgres_url = get_env_var("BO_POSTGRES_URL");
     const auto bot_token = get_env_var("BO_DISCORD_BUILD_COMMAND_BOT_TOKEN");
@@ -132,9 +231,10 @@ void do_main()
         });
 
     g_bot->on_slashcommand(
-        [](const dpp::slashcommand_t& event) -> dpp::task<void>
+        [&msg_channel](const dpp::slashcommand_t& event) -> dpp::task<void>
         {
             const auto cmd_name = event.command.get_command_name();
+            g_logger->info("processing command: {}", cmd_name);
 
             if (cmd_name == g_cmd_name_sws_upload_beta)
             {
@@ -146,6 +246,39 @@ void do_main()
                 // - Tag it in all repos.
                 // - Fire off taskiq task!
                 //   - Publish it to redis.
+
+                // TODO: so I need to fire up a dpp task or something, that I can
+                //   co_await on, to prevent blocking dpp. Inside that dpp task, I
+                //   I will also need to wait for the result of the asio task!
+
+                // DPP task.
+                // const auto y = co_await workshop_upload_beta_task(msg_channel);
+
+//                asio::co_spawn(
+//                    msg_channel->get_executor(),
+//                    send_workshop_upload_beta_msg(msg_channel),
+//                    asio::detached);
+
+//                asio::co_spawn(
+//                    msg_channel->get_executor(),
+//                    send_workshop_upload_beta_msg(msg_channel),
+//                    cobalt::use_op);
+
+                auto f = cobalt::spawn(
+                    msg_channel->get_executor(),
+                    send_workshop_upload_beta_msg_cobalt(msg_channel),
+                    asio::use_future
+                );
+                const auto x = f.get();
+                g_logger->info("x={}", x);
+
+                // co_await send_workshop_upload_beta_msg_cobalt(msg_channel);
+
+                // Cobalt task.
+                // co_await cobalt_task_test();
+
+                // TODO: we should probably wait to hear back from the
+                //   Python job here!
             }
             else if (cmd_name == g_cmd_name_sws_get_info)
             {
@@ -206,39 +339,149 @@ void do_main()
             co_return;
         });
 
-    g_bot->start(dpp::st_return);
+    g_bot->start(dpp::st_wait);
 
-    constexpr auto sleep = std::chrono::milliseconds(100);
-    while (g_signal_status == 0)
-    {
-        std::this_thread::sleep_for(sleep);
-    }
-
-    g_logger->info("exiting");
-    g_bot->shutdown();
+    // constexpr auto sleep = chrono::milliseconds(100);
+    // while (g_signal_status == 0)
+    // {
+    //     std::this_thread::sleep_for(sleep);
+    // }
+    // g_bot->shutdown();
 }
+
+auto co_handle_workshop_upload_beta() -> asio::awaitable<void>
+{
+    // TODO: post to Redis!
+
+    co_return;
+}
+
+auto co_main(
+    redis::config cfg,
+    std::shared_ptr<MessageChannel> msg_channel
+) -> asio::awaitable<void>
+{
+    // TODO: process redis shit here.
+    // - while running:
+    // - get message from "queue"
+
+    // TODO: create a new connection every time we get a new message. The rate at
+    //   which we receive them is so low, it shouldn't matter here.
+
+    while (true)
+    {
+        const auto [ec, msg_type] = co_await msg_channel->async_receive(
+            asio::as_tuple(asio::use_awaitable));
+
+        const auto mt = static_cast<std::underlying_type<MessageType>::type>(msg_type);
+
+        g_logger->info("got message: {}", mt);
+
+        if (!ec)
+        {
+            switch (msg_type)
+            {
+                case MessageType::WorkshopUploadBeta:
+                    co_await co_handle_workshop_upload_beta();
+                    break;
+                default:
+                    g_logger->error("invalid MessageType: {}", mt);
+            }
+        }
+        else if (ec.value() == asio::error::eof)
+        {
+            g_logger->info("co_main: {}: {}", ec.value(), ec.message());
+            break;
+        }
+        else
+        {
+            g_logger->error("co_main error: {}: {}", ec.value(), ec.message());
+        }
+    }
+}
+
+} // namespace
 
 int main()
 {
     try
     {
-        std::signal(SIGINT, &signal_handler);
-        std::signal(SIGTERM, &signal_handler);
-#if !BO_WINDOWS
-        std::signal(SIGHUP, &signal_handler);
-#endif // !BO_WINDOWS
+        constexpr auto default_log_level = spdlog::level::info;
+        spdlog::init_thread_pool(8192, 2);
+        constexpr auto max_log_size = 1024 * 1024 * 10;
+        auto stdout_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        auto rotating_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            "bo_build_commands_bot.log", max_log_size, 3);
+        const auto sinks = std::vector<spdlog::sink_ptr>{stdout_sink, rotating_sink};
+        g_logger = std::make_shared<spdlog::async_logger>(
+            "bo_build_commands_bot", sinks.cbegin(), sinks.cend(), spdlog::thread_pool(),
+            spdlog::async_overflow_policy::overrun_oldest);
+        spdlog::register_logger(g_logger);
+        g_logger->set_level(default_log_level);
+        g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e%z] [%n] [%^%l%$] [th#%t]: %v");
 
-        do_main();
+        redis::config redis_cfg;
+        asio::io_context ioc{BOOST_ASIO_CONCURRENCY_HINT_1};
+        // TODO: what's the actual plan with this?
+        //   - In redis "broker" thread, wait for this timer?
+        //   - When cancel_one is called on the timer, send the message!?
+        //   - What about synchronized access to the message data??
+        // asio::steady_timer msg_timer{ioc.get_executor()};
+
+        constexpr std::size_t msg_channel_size = 512;
+        // MessageChannel msg_channel{ioc.get_executor(), msg_channel_size};
+        auto msg_channel = std::make_shared<MessageChannel>(ioc.get_executor(), msg_channel_size);
+
+        std::thread bot_thread(bot_main, msg_channel);
+
+        asio::co_spawn(ioc, co_main(redis_cfg, msg_channel), [](std::exception_ptr e)
+        {
+            if (e)
+            {
+                std::rethrow_exception(e);
+            }
+        });
+
+        asio::signal_set signals{
+            ioc,
+            SIGINT,
+            SIGTERM,
+#if !BO_WINDOWS
+            SIGHUP
+#endif // !BO_WINDOWS
+        };
+        signals.async_wait(
+            [&](auto, auto)
+            {
+                g_bot->shutdown();
+                msg_channel->cancel();
+                ioc.stop();
+            });
+
+        // TODO: is there any need to make this multi-threaded too?
+        ioc.run();
+
+        bot_thread.join();
+
+        g_logger->info("exiting");
 
         return EXIT_SUCCESS;
     }
     catch (const std::exception& ex)
     {
         std::cout << std::format("unhandled exception: {}\n", ex.what());
+        if (debugger_present())
+        {
+            throw;
+        }
     }
     catch (...)
     {
         std::cout << "unhandled error\n";
+        if (debugger_present())
+        {
+            throw;
+        }
     }
 
     return EXIT_FAILURE;
