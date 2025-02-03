@@ -30,7 +30,7 @@ dependencies = [
     "aiohttp[speedups]==3.11.11",
     "asyncpg==0.30.0",
     "audioop-lts==0.2.1; python_version >= '3.13'", # Needed by discord.py.
-    "beautifulsoup4==4.12.3",
+    "beautifulsoup4==4.13.1",
     "boltons==24.1.0",
     "certifi==2024.12.14",
     "discord.py==2.4.0",
