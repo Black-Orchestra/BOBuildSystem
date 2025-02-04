@@ -23,6 +23,7 @@ constexpr auto bo_task_label_key = "task_label";
 
 // Publish message JSON bytes to Redis to send the task to worker(s).
 // {
+//     "task_id": "...",
 //     "task_name": "my_project.module1.task",
 //     "args": [1, 2, 3],
 //     "kwargs": {"a": 1, "b": 2, "c": 3},
@@ -33,10 +34,12 @@ constexpr auto bo_task_label_key = "task_label";
 // }
 struct Message
 {
+    std::string task_id{};
     std::string task_name{};
-    std::vector<std::any> args;
-    std::map<std::string, std::any> kwargs{};
-    std::map<std::string, std::any> labels{};
+    // Args and kwargs as bytes.
+    std::vector<std::string> args;
+    std::map<std::string, std::string> kwargs{};
+    std::map<std::string, std::string> labels{};
 };
 static_assert(glz::detail::reflectable<Message>);
 
