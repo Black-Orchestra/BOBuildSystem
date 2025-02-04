@@ -35,10 +35,12 @@ target_link_libraries(
     Boost::asio
     Boost::cobalt
     Boost::process
+    Boost::redis
     Boost::system
     dpp
     glaze::glaze
     spdlog::spdlog
+    uuid_v4::uuid_v4
 )
 
 target_compile_definitions(

@@ -12,6 +12,9 @@ else ()
     message(STATUS "IPO / LTO not supported: ${BO_IPO_ERROR}")
 endif ()
 
+include(cmake/dpp.cmake)
+include(cmake/uuid_v4.cmake)
+
 find_package(
     spdlog
     CONFIG
@@ -25,6 +28,12 @@ find_package(
 )
 
 find_package(
+    openssl
+    CONFIG
+    REQUIRED
+)
+
+find_package(
     Boost
     CONFIG
     REQUIRED
@@ -32,6 +41,8 @@ find_package(
     asio
     cobalt
     process
+    redis
+    system
 )
 
 if (WIN32)
@@ -39,7 +50,6 @@ if (WIN32)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 endif ()
 
-include(cmake/dpp.cmake)
 add_subdirectory(src)
 
 # TODO: figure out smart way to build with different AVX/SSE versions
