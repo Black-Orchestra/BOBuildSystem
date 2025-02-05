@@ -5,6 +5,7 @@
 #include <format>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <random>
 #include <string_view>
 #include <thread>
@@ -33,6 +34,9 @@
 #include <boost/redis/response.hpp>
 #include <boost/redis/src.hpp>
 
+// TODO: group this up after merge:
+#include <boost/process/v2/process.hpp>
+
 #include <dpp/dpp.h>
 
 #include <spdlog/spdlog.h>
@@ -53,6 +57,7 @@ namespace chrono = std::chrono;
 namespace asio = boost::asio;
 namespace redis = boost::redis;
 namespace cobalt = boost::cobalt;
+namespace process = boost::process::v2;
 
 using boost::asio::experimental::concurrent_channel;
 
@@ -429,12 +434,47 @@ int main()
         // MessageChannel msg_channel{ioc.get_executor(), msg_channel_size};
         auto msg_channel = std::make_shared<MessageChannel>(ioc.get_executor(), msg_channel_size);
 
-        std::thread bot_thread(bot_main, msg_channel);
+        const auto stop = [&msg_channel, &ioc]
+            (std::optional<boost::system::error_code> ec = std::nullopt,
+             std::optional<int> signal = std::nullopt)
+        {
+            if (g_logger)
+            {
+                const auto estr = (ec) ? std::to_string(ec.value().value()) : "notset";
+                const auto sstr = (signal) ? std::to_string(signal.value()) : "notset";
+                g_logger->info("stopping, ec={}, sig={}", estr, sstr);
+            }
+            if (g_bot)
+            {
+                g_bot->shutdown();
+            }
+            if (msg_channel)
+            {
+                msg_channel->cancel();
+            }
+            ioc.stop();
+        };
 
-        asio::co_spawn(ioc, co_main(redis_cfg, msg_channel), [](std::exception_ptr e)
+        std::exception_ptr bot_main_ex;
+        std::thread bot_thread(
+            [&bot_main_ex, &msg_channel, &stop]()
+            {
+                try
+                {
+                    bot_main(msg_channel);
+                }
+                catch (...)
+                {
+                    stop();
+                    bot_main_ex = std::current_exception();
+                }
+            });
+
+        asio::co_spawn(ioc, co_main(redis_cfg, msg_channel), [&stop](std::exception_ptr e)
         {
             if (e)
             {
+                stop();
                 std::rethrow_exception(e);
             }
         });
@@ -448,11 +488,9 @@ int main()
 #endif // !BO_WINDOWS
         };
         signals.async_wait(
-            [&](auto, auto)
+            [&stop](boost::system::error_code ec, int signal)
             {
-                g_bot->shutdown();
-                msg_channel->cancel();
-                ioc.stop();
+                stop(ec, signal);
             });
 
         // TODO: is there any need to make this multi-threaded too?
@@ -460,13 +498,23 @@ int main()
 
         bot_thread.join();
 
+        if (bot_main_ex)
+        {
+            std::rethrow_exception(bot_main_ex);
+        }
+
         g_logger->info("exiting");
+
+        if (g_logger)
+        {
+            g_logger->flush();
+        }
 
         return EXIT_SUCCESS;
     }
     catch (const std::exception& ex)
     {
-        std::cout << std::format("unhandled exception: {}\n", ex.what());
+        std::cout << std::format("unhandled exception: {}", ex.what()) << std::endl;
         if (debugger_present())
         {
             throw;
@@ -474,7 +522,7 @@ int main()
     }
     catch (...)
     {
-        std::cout << "unhandled error\n";
+        std::cout << "unhandled error" << std::endl;
         if (debugger_present())
         {
             throw;
