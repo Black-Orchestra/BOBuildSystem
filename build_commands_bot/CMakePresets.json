@@ -100,6 +100,19 @@
       "binaryDir": "${sourceDir}/cmake-build-${presetName}"
     },
     {
+      "name": "config-windows-debug-x64-no-asan",
+      "displayName": "Windows Debug x64 configuration (no AddressSanitizer)",
+      "inherits": "config-base-windows-debug",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/cmake-build-${presetName}",
+      "cacheVariables": {
+        "BO_COMPILE_OPTIONS": "/W4;/await:strict;/Zi"
+      }
+    },
+    {
       "name": "config-windows-release-x64",
       "displayName": "Windows Release x64 configuration",
       "inherits": "config-base-windows-release",
@@ -148,6 +161,11 @@
       "name": "windows-debug-x64",
       "configurePreset": "config-windows-debug-x64",
       "displayName": "Windows Debug x64"
+    },
+    {
+      "name": "windows-debug-x64-no-asan",
+      "configurePreset": "config-windows-debug-x64-no-asan",
+      "displayName": "Windows Debug x64 (no AddressSanitizer)"
     },
     {
       "name": "windows-release-x64",

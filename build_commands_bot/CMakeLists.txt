@@ -3,6 +3,8 @@ project(build_commands_bot)
 
 set(CMAKE_CXX_STANDARD 23)
 
+include(CMakePrintHelpers)
+
 include(CheckIPOSupported)
 check_ipo_supported(RESULT BO_IPO_SUPPORTED OUTPUT BO_IPO_ERROR)
 
@@ -10,6 +12,13 @@ if (BO_IPO_SUPPORTED)
     message(STATUS "IPO / LTO enabled: ${BO_IPO_SUPPORTED}")
 else ()
     message(STATUS "IPO / LTO not supported: ${BO_IPO_ERROR}")
+endif ()
+
+if (WIN32)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+    cmake_print_variables(CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+    cmake_print_variables(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
 endif ()
 
 include(cmake/dpp.cmake)
@@ -44,11 +53,6 @@ find_package(
     redis
     system
 )
-
-if (WIN32)
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-endif ()
 
 add_subdirectory(src)
 
