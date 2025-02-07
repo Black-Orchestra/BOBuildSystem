@@ -37,7 +37,7 @@ find_package(
 )
 
 find_package(
-    openssl
+    OpenSSL
     CONFIG
     REQUIRED
 )
