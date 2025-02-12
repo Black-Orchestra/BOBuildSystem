@@ -6,4 +6,4 @@
 	url = https://github.com/brainboxdotcc/DPP.git
 [submodule "build_commands_bot/submodules/uuid_v4"]
 	path = build_commands_bot/submodules/uuid_v4
-	url = git@github.com:crashoz/uuid_v4.git
+	url = git@github.com:tuokri/uuid_v4.git
