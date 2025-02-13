@@ -13,7 +13,9 @@
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
 #define BO_WINDOWS 1
 
+#ifndef __JETBRAINS_IDE__
 #include <SDKDDKVer.h> // Silence "Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately".
+#endif // __JETBRAINS_IDE__
 
 #else
 #define BO_WINDOWS 0
@@ -67,15 +69,13 @@ enum class MessageType: std::uint8_t
     WorkshopUploadBeta,
 };
 
-// TODO: passed into MessageChannel message to provide a one way
-//  single-producer, single-consumer return channel for the job result/error.
 using MessageResponseChannel = channel<void(boost::system::error_code, std::string)>;
 // TODO: include explicit executor type here?
 using MessageChannel = concurrent_channel<
     void(boost::system::error_code, MessageType, MessageResponseChannel*)>;
 
 constexpr auto g_taskiq_redis_channel = "taskiq";
-// Mirrored in Python bobuild/tasks.py.
+// NOTE: Mirrored in Python bobuild/tasks.py.
 constexpr auto g_taskiq_lock_timeout = 240 * 60;
 
 constexpr auto g_cmd_name_sws_upload_beta = "workshop_upload_beta";
@@ -154,9 +154,9 @@ std::string get_env_var(const std::string_view key)
 #endif // BO_WINDOWS
 }
 
-// TODO: THIS IS THE RIGHT WAY TO CO-OP DPP AND ASIO/COBALT!
 auto send_workshop_upload_beta_msg_cobalt(
-    std::shared_ptr<MessageChannel> msg_channel
+    MessageChannel* msg_channel,
+    MessageResponseChannel* resp_channel
 ) -> cobalt::task<boost::system::result<std::string>>
 {
     auto ex = co_await cobalt::this_coro::executor;
@@ -166,25 +166,36 @@ auto send_workshop_upload_beta_msg_cobalt(
     //   1. Create a channel when we get here.
     //   2. Send that channel along with the message type.
     //   3. Wait for response, error or OK status, co_return them.
-    MessageResponseChannel resp_channel{ex};
 
     g_logger->info("send_workshop_upload_beta_msg running in cobalt::task");
 
     co_await msg_channel->async_send(
         boost::system::error_code{},
         MessageType::WorkshopUploadBeta,
-        &resp_channel,
+        resp_channel,
         cobalt::use_op
     );
 
     g_logger->info("sent");
 
-    asio::steady_timer test_timer{ex};
-    test_timer.expires_after(chrono::seconds(10));
-    co_await test_timer.async_wait();
+    // asio::steady_timer test_timer{ex};
+    // test_timer.expires_after(chrono::seconds(10));
+    // co_await test_timer.async_wait();
 
-    const auto [ec, resp] = co_await resp_channel.async_receive(
+    g_logger->debug("waiting for resp_channel resp");
+    // TODO: use cancellation slot?
+//    asio::deadline_timer resp_deadline{ex};
+//    resp_deadline.expires_from_now(boost::posix_time::seconds(2));
+//    resp_deadline.async_wait(
+//        [&resp_channel](boost::system::error_code ec)
+//        {
+//            // TODO: proper timeouts for all long-running operations!
+//            // resp_channel.cancel();
+//        });
+
+    const auto [ec, resp] = co_await resp_channel->async_receive(
         asio::as_tuple(cobalt::use_op));
+    g_logger->debug("got resp_channel resp");
 
     if (ec)
     {
@@ -193,7 +204,7 @@ auto send_workshop_upload_beta_msg_cobalt(
     co_return resp;
 }
 
-void bot_main(std::shared_ptr<MessageChannel> msg_channel)
+void bot_main(MessageChannel* msg_channel)
 {
     const auto redis_url = get_env_var("BO_REDIS_URL");
     const auto postgres_url = get_env_var("BO_POSTGRES_URL");
@@ -245,36 +256,22 @@ void bot_main(std::shared_ptr<MessageChannel> msg_channel)
                 // - Fire off taskiq task!
                 //   - Publish it to redis.
 
-                // TODO: so I need to fire up a dpp task or something, that I can
-                //   co_await on, to prevent blocking dpp. Inside that dpp task, I
-                //   I will also need to wait for the result of the asio task!
-
-                // DPP task.
-                // const auto y = co_await workshop_upload_beta_task(msg_channel);
-
-//                asio::co_spawn(
-//                    msg_channel->get_executor(),
-//                    send_workshop_upload_beta_msg(msg_channel),
-//                    asio::detached);
-
-//                asio::co_spawn(
-//                    msg_channel->get_executor(),
-//                    send_workshop_upload_beta_msg(msg_channel),
-//                    cobalt::use_op);
-
+                MessageResponseChannel resp_channel{msg_channel->get_executor()};
                 auto sws_future = cobalt::spawn(
                     msg_channel->get_executor(),
-                    send_workshop_upload_beta_msg_cobalt(msg_channel),
+                    send_workshop_upload_beta_msg_cobalt(msg_channel, &resp_channel),
                     asio::use_future
                 );
-                const boost::system::result<std::string> result = sws_future.get();
-                if (result)
+                // TODO: we need a timeout here!
+                const auto job_result = sws_future.get();
+                resp_channel.cancel();
+                if (job_result)
                 {
-                    g_logger->info("result={}", result.value());
+                    g_logger->info("job_result={}", job_result.value());
                 }
                 else
                 {
-                    g_logger->error("result={}", result.error().message());
+                    g_logger->error("job_result={}", job_result.error().message());
                 }
 
                 // TODO: we should probably wait to hear back from the
@@ -340,37 +337,66 @@ void bot_main(std::shared_ptr<MessageChannel> msg_channel)
         });
 
     g_bot->start(dpp::st_wait);
-
-    // constexpr auto sleep = chrono::milliseconds(100);
-    // while (g_signal_status == 0)
-    // {
-    //     std::this_thread::sleep_for(sleep);
-    // }
-    // g_bot->shutdown();
 }
 
 auto co_handle_workshop_upload_beta(
-    redis::config cfg
+    redis::config cfg,
+    std::shared_ptr<redis::connection> connection
 ) -> asio::awaitable<boost::system::result<std::string>>
 {
+    g_logger->info("co_handle_workshop_upload_beta");
+
+    // TODO: temp helper for debugging.
+    std::string message{"asdasd"};
+    co_return message;
+
     auto ex = co_await asio::this_coro::executor;
-    auto conn = redis::connection{ex};
 
     // 1. Check if task lock exists.
     redis::request lock_req;
-    redis::response<bool> lock_resp; // TODO: what's the resp here?
-    lock_req.push("SET", "key", taskiq::bo_build_lock_name, "EX", g_taskiq_lock_timeout, "NX", 1);
-    const auto [lock_req_ec, _0] = co_await conn.async_exec(
+    redis::generic_response lock_resp; // TODO: what's the resp here?
+    lock_req.push(
+        "SET",
+        taskiq::bo_build_lock_name, "locked",
+        "EX", g_taskiq_lock_timeout,
+        "NX");
+    g_logger->debug("before redis async_exec");
+    const auto [lock_req_ec, lock_resp_size] = co_await connection->async_exec(
         lock_req, lock_resp, asio::as_tuple(asio::use_awaitable));
+
+    g_logger->debug("lock_resp_size: {}", lock_resp_size);
+
     if (lock_req_ec)
     {
+        std::cout << "what the fuck" << std::endl;
         // TODO: propagate error codes!
-        throw std::runtime_error(std::format(
-            "redis error: {}", lock_req_ec.message()));
+//        throw std::runtime_error(std::format(
+//            "redis error: {}", lock_req_ec.message()));
+        co_return lock_req_ec;
+    }
+    g_logger->debug("after redis async_exec");
+
+    // TODO: if locking was ok, we get back "OK", if not, empty string?
+    g_logger->info("resp has_value: {}", lock_resp.has_value());
+    if (lock_resp.has_value())
+    {
+        // g_logger->info("resp size: {}", lock_resp->size());
+        g_logger->info("resp: {}", lock_resp.value().at(0).value);
+        message = lock_resp.value().at(0).value;
     }
 
+    g_logger->info("resp has_error: {}", lock_resp.has_error());
+    if (lock_resp.has_error())
+    {
+        g_logger->info("resp error: {}", lock_resp.error().diagnostic);
+        // boost::system::error_code ec_{};
+        // ec_.assign(lock_resp.error()); // TODO(IMPORTANT): make custom error category/categories!
+        co_return asio::error::operation_not_supported;
+    }
+    lock_resp->clear();  // TODO: NEEDED?
+
     auto msg = taskiq::make_bo_sws_upload_msg();
-    UUIDv4::UUIDGenerator<std::mt19937_64> uuid_gen;
+    UUIDv4::UUIDGenerator<std::mt19937_64> uuid_gen{std::random_device()()};
     UUIDv4::UUID uuid = uuid_gen.getUUID();
     msg.task_id = uuid.bytes();
 
@@ -379,60 +405,89 @@ auto co_handle_workshop_upload_beta(
     if (json_ec)
     {
         // TODO: propagate error codes!
-        throw std::runtime_error(std::format(
-            "glz::write_json error: {}", json_ec.custom_error_message));
+//        throw std::runtime_error(std::format(
+//            "glz::write_json error: {}", json_ec.custom_error_message));
+        // co_return json_ec; // TODO: CUSTOM ERROR CATEGORIES!
+        co_return asio::error::operation_not_supported;
     }
 
-    redis::request pub_req;
-    pub_req.push("PUBLISH", g_taskiq_redis_channel, msg_json);
-    const auto [pub_req_ec, _1] = co_await conn.async_exec(
-        pub_req, redis::ignore, asio::as_tuple(asio::use_awaitable));
+//    redis::request pub_req;
+//    pub_req.push("PUBLISH", g_taskiq_redis_channel, msg_json);
+//    const auto [pub_req_ec, _1] = co_await conn.async_exec(
+//        pub_req, redis::ignore, asio::as_tuple(asio::use_awaitable));
     // TODO: check ec.
 
-    conn.cancel();
+//    while (conn.will_reconnect())
+//    {
+//        asio::deadline_timer t{ex};
+//        t.expires_from_now(boost::posix_time::microsec(1));
+//        co_await t.async_wait(asio::use_awaitable);
+//    }
 
     // TODO: actual error handling!
-    co_return "OK?";
+    co_return message;
 }
 
 auto co_main(
     redis::config cfg,
-    std::shared_ptr<MessageChannel> msg_channel
+    MessageChannel* msg_channel
 ) -> asio::awaitable<void>
 {
     // TODO: process redis shit here.
     // - while running:
     // - get message from "queue"
 
-    // TODO: create a new connection every time we get a new message. The rate at
+    // Create a new connection every time we get a new message. The rate at
     //   which we receive them is so low, it shouldn't matter here.
+
+    boost::system::result<std::string> job_result;
+    boost::system::error_code job_error{};
+    std::string job_result_value{};
+    boost::system::error_code send_resp_ec{};
 
     while (true)
     {
-        const auto [ec, msg_type, resp_channel_ptr] = co_await msg_channel->async_receive(
-            asio::as_tuple(asio::use_awaitable));
+        const auto [ec, msg_type, resp_channel_ptr]
+            = co_await msg_channel->async_receive(asio::as_tuple(asio::use_awaitable));
 
         const auto mt = static_cast<std::underlying_type<MessageType>::type>(msg_type);
 
         g_logger->info("got message: {}", mt);
 
-        boost::system::result<std::string> job_result;
-        boost::system::error_code job_error{};
-        std::string job_result_value{};
-        boost::system::error_code send_resp_ec{};
         if (!ec)
         {
+            // redis::connection conn{co_await asio::this_coro::executor};
+            const auto ex = co_await asio::this_coro::executor;
+            const auto conn = std::make_shared<redis::connection>(ex);
+
+            conn->async_run(
+                cfg,
+                {},
+                [conn](boost::system::error_code conn_ec)
+                {
+                    if (conn)
+                    {
+                        conn->cancel();
+                    }
+                    // TODO: propagate ecs. But how?
+                    throw std::runtime_error(
+                        std::format("redis connection async_run error: {}", conn_ec.message()));
+                }
+            );
+
             switch (msg_type)
             {
                 case MessageType::WorkshopUploadBeta:
-                    job_result = co_await co_handle_workshop_upload_beta(cfg);
-                    job_error = job_result.error();
-                    job_result_value = (job_result.has_value()) ? job_result.value() : "";
+                    job_result = co_await co_handle_workshop_upload_beta(cfg, conn);
+                    job_error = job_result.has_error() ? job_result.error() : job_error;
+                    job_result_value = job_result.has_value() ? job_result.value() : "";
+                    g_logger->debug("sending resp_channel resp");
                     co_await resp_channel_ptr->async_send(
                         job_error,
                         job_result_value,
                         asio::redirect_error(send_resp_ec)
                     );
+                    g_logger->debug("resp_channel resp sent");
                     break;
                 default:
                     g_logger->error("invalid MessageType: {}", mt);
@@ -443,6 +498,8 @@ auto co_main(
                 g_logger->error("async_send error: failed to send job result response: {}",
                                 send_resp_ec.message());
             }
+
+            conn->cancel();
         }
         else if (ec.value() == asio::error::eof)
         {
@@ -482,17 +539,16 @@ int main()
         g_logger->set_level(default_log_level);
         g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e%z] [%n] [%^%l%$] [th#%t]: %v");
 
+        // TODO: build this dynamically in the same way as the Python counterpart.
         redis::config redis_cfg;
-        asio::io_context ioc{BOOST_ASIO_CONCURRENCY_HINT_1};
-        // TODO: what's the actual plan with this?
-        //   - In redis "broker" thread, wait for this timer?
-        //   - When cancel_one is called on the timer, send the message!?
-        //   - What about synchronized access to the message data??
-        // asio::steady_timer msg_timer{ioc.get_executor()};
+        // redis_cfg.addr = redis::address{"127.0.0.1", "TODO"};
+        redis_cfg.username = "default";
+        redis_cfg.password = "asd";
 
-        constexpr std::size_t msg_channel_size = 512;
-        // MessageChannel msg_channel{ioc.get_executor(), msg_channel_size};
-        auto msg_channel = std::make_shared<MessageChannel>(ioc.get_executor(), msg_channel_size);
+        asio::io_context ioc{BOOST_ASIO_CONCURRENCY_HINT_1};
+
+        constexpr std::size_t msg_channel_size = 128;
+        MessageChannel msg_channel{ioc.get_executor(), msg_channel_size};
 
         const auto stop = [&msg_channel, &ioc]
             (std::optional<boost::system::error_code> ec = std::nullopt,
@@ -508,10 +564,7 @@ int main()
             {
                 g_bot->shutdown();
             }
-            if (msg_channel)
-            {
-                msg_channel->cancel();
-            }
+            msg_channel.cancel();
             ioc.stop();
         };
 
@@ -521,7 +574,7 @@ int main()
             {
                 try
                 {
-                    bot_main(msg_channel);
+                    bot_main(&msg_channel);
                 }
                 catch (...)
                 {
@@ -530,14 +583,25 @@ int main()
                 }
             });
 
-        asio::co_spawn(ioc, co_main(redis_cfg, msg_channel), [&stop](std::exception_ptr e)
-        {
-            if (e)
+        asio::co_spawn(
+            ioc,
+            co_main(redis_cfg, &msg_channel),
+            [&stop](std::exception_ptr e)
             {
-                stop();
-                std::rethrow_exception(e);
-            }
-        });
+                try
+                {
+                    if (e)
+                    {
+                        stop();
+                        std::rethrow_exception(e);
+                    }
+                }
+                catch (const std::exception& ex)
+                {
+                    g_logger->error("co_main error: {}", ex.what());
+                    throw;
+                }
+            });
 
         asio::signal_set signals{
             ioc,
