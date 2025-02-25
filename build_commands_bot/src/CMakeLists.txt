@@ -29,6 +29,12 @@ target_link_options(
     ${BO_LINKER_OPTIONS}
 )
 
+target_include_directories(
+    build_commands_bot
+    PUBLIC
+    ${CMAKE_SOURCE_DIR}/include/
+)
+
 target_link_libraries(
     build_commands_bot
     PRIVATE
