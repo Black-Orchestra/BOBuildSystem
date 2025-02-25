@@ -1,3 +1,6 @@
+// TODO: spdlog crash?
+#define _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR
+
 #include <chrono>
 #include <csignal>
 #include <cstdint>
@@ -8,21 +11,20 @@
 #include <optional>
 #include <random>
 #include <string_view>
+#include <system_error>
 #include <thread>
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
-#define BO_WINDOWS 1
+#if BO_WINDOWS
 
 #ifndef __JETBRAINS_IDE__
 #include <SDKDDKVer.h> // Silence "Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately".
 #endif // __JETBRAINS_IDE__
 
-#else
-#define BO_WINDOWS 0
 #endif
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/consign.hpp>
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
@@ -50,11 +52,19 @@
 
 #include <glaze/glaze.hpp>
 
-#include "taskiq.hpp"
+#include "bobuild/bobuild.hpp"
+#include "bobuild/taskiq.hpp"
+
+#if BO_WINDOWS
+
+#include "bobuild/ucrt.hpp"
+
+#endif // BO_WINDOWS
 
 namespace
 {
 
+namespace taskiq = bo::taskiq;
 namespace chrono = std::chrono;
 namespace asio = boost::asio;
 namespace redis = boost::redis;
@@ -362,9 +372,7 @@ auto co_handle_workshop_upload_beta(
         "NX");
     g_logger->debug("before redis async_exec");
     const auto [lock_req_ec, lock_resp_size] = co_await connection->async_exec(
-        lock_req, lock_resp, asio::as_tuple(asio::use_awaitable));
-
-    g_logger->debug("lock_resp_size: {}", lock_resp_size);
+        lock_req, lock_resp, asio::as_tuple(asio::consign(asio::use_awaitable, connection)));
 
     if (lock_req_ec)
     {
@@ -380,7 +388,7 @@ auto co_handle_workshop_upload_beta(
     g_logger->info("resp has_value: {}", lock_resp.has_value());
     if (lock_resp.has_value())
     {
-        // g_logger->info("resp size: {}", lock_resp->size());
+        g_logger->debug("lock_resp_size: {}", lock_resp_size);
         g_logger->info("resp: {}", lock_resp.value().at(0).value);
         message = lock_resp.value().at(0).value;
     }
@@ -411,11 +419,18 @@ auto co_handle_workshop_upload_beta(
         co_return asio::error::operation_not_supported;
     }
 
-//    redis::request pub_req;
-//    pub_req.push("PUBLISH", g_taskiq_redis_channel, msg_json);
-//    const auto [pub_req_ec, _1] = co_await conn.async_exec(
-//        pub_req, redis::ignore, asio::as_tuple(asio::use_awaitable));
+    redis::generic_response pub_resp; // TODO: what's the resp here?
+    redis::request pub_req;
+    pub_req.push("PUBLISH", g_taskiq_redis_channel, msg_json);
+    const auto [pub_req_ec, pub_req_size] = co_await connection->async_exec(
+        pub_req, pub_resp, asio::as_tuple(asio::consign(asio::use_awaitable, connection)));
     // TODO: check ec.
+
+    if (pub_resp.has_value())
+    {
+        g_logger->debug("pub_req_size: {}", pub_req_size);
+        g_logger->info("pub_resp: {}", pub_resp.value().at(0).value);
+    }
 
 //    while (conn.will_reconnect())
 //    {
@@ -458,7 +473,8 @@ auto co_main(
         {
             // redis::connection conn{co_await asio::this_coro::executor};
             const auto ex = co_await asio::this_coro::executor;
-            const auto conn = std::make_shared<redis::connection>(ex);
+            // TODO: try unique_ptr here?
+            auto conn = std::make_shared<redis::connection>(ex);
 
             conn->async_run(
                 cfg,
@@ -500,6 +516,7 @@ auto co_main(
             }
 
             conn->cancel();
+            conn.reset();
         }
         else if (ec.value() == asio::error::eof)
         {
@@ -539,6 +556,29 @@ int main()
         g_logger->set_level(default_log_level);
         g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e%z] [%n] [%^%l%$] [th#%t]: %v");
 
+#if BO_WINDOWS
+        const auto ucrt_version = bo::GetUCRTVersion();
+        if (ucrt_version)
+        {
+            g_logger->info(
+                "UCRT version: File={}.{}.{}.{}, Product={}.{}.{}.{}",
+                ucrt_version.value().FileVersion[0],
+                ucrt_version.value().FileVersion[1],
+                ucrt_version.value().FileVersion[2],
+                ucrt_version.value().FileVersion[3],
+                ucrt_version.value().ProductVersion[0],
+                ucrt_version.value().ProductVersion[1],
+                ucrt_version.value().ProductVersion[2],
+                ucrt_version.value().ProductVersion[3]
+            );
+        }
+        else
+        {
+            g_logger->error("error getting UCRT version: {}",
+                            std::system_category().message(ucrt_version.error()));
+        }
+#endif // BO_WINDOWS
+
         // TODO: build this dynamically in the same way as the Python counterpart.
         redis::config redis_cfg;
         // redis_cfg.addr = redis::address{"127.0.0.1", "TODO"};
@@ -576,10 +616,17 @@ int main()
                 {
                     bot_main(&msg_channel);
                 }
+                catch (const std::exception& e)
+                {
+                    stop();
+                    bot_main_ex = std::current_exception();
+                    g_logger->error("unhandled error in bot_main: {}", e.what());
+                }
                 catch (...)
                 {
                     stop();
                     bot_main_ex = std::current_exception();
+                    g_logger->error("unhandled error in bot_main");
                 }
             });
 
@@ -599,7 +646,7 @@ int main()
                 catch (const std::exception& ex)
                 {
                     g_logger->error("co_main error: {}", ex.what());
-                    throw;
+                    throw; // TODO: this throw does not get propagated?
                 }
             });
 
