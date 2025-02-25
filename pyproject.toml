@@ -43,7 +43,7 @@ dependencies = [
     "pywin32==308; platform_system == 'Windows'",
     "taskiq-pg==0.1.3",
     "taskiq-redis==1.0.2",
-    "taskiq==0.11.10",
+    "taskiq==0.11.12",
     "tqdm==4.67.1",
     "ujson==5.10.0",
     "uvloop==0.21.0; platform_system != 'Windows'",
