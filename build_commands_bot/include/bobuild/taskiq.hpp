@@ -13,7 +13,7 @@
 
 #include <glaze/glaze.hpp>
 
-namespace taskiq
+namespace bo::taskiq
 {
 
 constexpr auto bo_build_lock_name = "bobuild.tasks_bo._UNIQUE_TASK__LOCK";
@@ -51,6 +51,6 @@ inline Message make_bo_sws_upload_msg()
     return msg;
 }
 
-} // taskiq
+} // bo::taskiq
 
 #endif // TASKIQ_HPP
