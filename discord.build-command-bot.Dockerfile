@@ -47,6 +47,7 @@ COPY --chown=bot:bot .gitmodules .
 COPY --chown=bot:bot README.md .
 COPY --chown=bot:bot build_commands_bot/cmake/ ./build_commands_bot/cmake/
 COPY --chown=bot:bot build_commands_bot/src/ ./build_commands_bot/src/
+COPY --chown=bot:bot build_commands_bot/include/ ./build_commands_bot/include/
 COPY --chown=bot:bot build_commands_bot/submodules/ ./build_commands_bot/submodules/
 COPY --chown=bot:bot build_commands_bot/CMakeLists.txt ./build_commands_bot/CMakeLists.txt
 COPY --chown=bot:bot build_commands_bot/CMakePresets.json ./build_commands_bot/CMakePresets.json
