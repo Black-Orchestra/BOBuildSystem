@@ -49,3 +49,5 @@ cmake --build --preset windows-debug-x64
 - Improve CI build speeds with caching?
   - For the Docker image build?
   - Ccache?
+
+- Boost channel try_send optimization.
