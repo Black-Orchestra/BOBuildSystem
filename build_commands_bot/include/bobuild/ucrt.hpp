@@ -37,33 +37,37 @@ inline std::expected<UCRTVersion, HRESULT> GetUCRTVersion()
     const HMODULE ucrt{GetModuleHandle(DllName)};
     if (!ucrt)
     {
-        return std::unexpected(HRESULT_FROM_WIN32(GetLastError()));
+        return std::unexpected(::HRESULT_FROM_WIN32(::GetLastError()));
     }
 
-    std::wstring path;
-    path.resize_and_overwrite(_MAX_PATH, [ucrt](wchar_t* ptr, const std::size_t size)
+    std::string path;
+    path.resize_and_overwrite(_MAX_PATH, [ucrt](char* ptr, const std::size_t size)
     {
-        return GetModuleFileName(ucrt, reinterpret_cast<LPSTR>(ptr), static_cast<DWORD>(size));
+        return GetModuleFileName(
+            ucrt,
+            static_cast<LPSTR>(ptr),
+            static_cast<DWORD>(size)
+        );
     });
 
     const DWORD versionInfoSize = GetFileVersionInfoSize(
-        reinterpret_cast<LPCSTR>(path.c_str()),
+        static_cast<LPCSTR>(path.c_str()),
         nullptr
     );
     if (!versionInfoSize)
     {
-        return std::unexpected(HRESULT_FROM_WIN32(GetLastError()));
+        return std::unexpected(::HRESULT_FROM_WIN32(::GetLastError()));
     }
 
     std::vector<std::byte> versionInfo(versionInfoSize);
 
     if (!GetFileVersionInfo(
-        reinterpret_cast<LPCSTR>(path.data()),
+        static_cast<LPCSTR>(path.c_str()),
         0,
         static_cast<DWORD>(versionInfo.size()),
         versionInfo.data()))
     {
-        return std::unexpected(HRESULT_FROM_WIN32(GetLastError()));
+        return std::unexpected(::HRESULT_FROM_WIN32(::GetLastError()));
     }
 
     VS_FIXEDFILEINFO* fixedFileInfo;
@@ -73,14 +77,18 @@ inline std::expected<UCRTVersion, HRESULT> GetUCRTVersion()
         reinterpret_cast<void**>(&fixedFileInfo),
         nullptr))
     {
-        return std::unexpected(HRESULT_FROM_WIN32(GetLastError()));
+        return std::unexpected(::HRESULT_FROM_WIN32(::GetLastError()));
     }
 
     return UCRTVersion{
-        {HIWORD(fixedFileInfo->dwFileVersionMS),    LOWORD(fixedFileInfo->dwFileVersionMS),
-            HIWORD(fixedFileInfo->dwFileVersionLS),    LOWORD(fixedFileInfo->dwFileVersionLS)},
-        {HIWORD(fixedFileInfo->dwProductVersionMS), LOWORD(fixedFileInfo->dwProductVersionMS),
-            HIWORD(fixedFileInfo->dwProductVersionLS), LOWORD(fixedFileInfo->dwProductVersionLS)}
+        {
+            HIWORD(fixedFileInfo->dwFileVersionMS),    LOWORD(fixedFileInfo->dwFileVersionMS),
+            HIWORD(fixedFileInfo->dwFileVersionLS),    LOWORD(fixedFileInfo->dwFileVersionLS)
+        },
+        {
+            HIWORD(fixedFileInfo->dwProductVersionMS), LOWORD(fixedFileInfo->dwProductVersionMS),
+            HIWORD(fixedFileInfo->dwProductVersionLS), LOWORD(fixedFileInfo->dwProductVersionLS)
+        }
     };
 }
 
