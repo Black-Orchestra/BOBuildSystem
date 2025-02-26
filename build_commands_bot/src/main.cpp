@@ -10,17 +10,21 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <stacktrace>
 #include <string_view>
 #include <system_error>
 #include <thread>
 
+#include "bobuild/bobuild.hpp"
+
 #if BO_WINDOWS
+
 
 #ifndef __JETBRAINS_IDE__
 #include <SDKDDKVer.h> // Silence "Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately".
 #endif // __JETBRAINS_IDE__
 
-#endif
+#endif // BO_WINDOWS
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -52,7 +56,6 @@
 
 #include <glaze/glaze.hpp>
 
-#include "bobuild/bobuild.hpp"
 #include "bobuild/taskiq.hpp"
 
 #if BO_WINDOWS
@@ -349,6 +352,8 @@ void bot_main(MessageChannel* msg_channel)
     g_bot->start(dpp::st_wait);
 }
 
+// TODO: don't log or "handle" errors here, let the caller
+//   do all the logging etc., just return the error codes.
 auto co_handle_workshop_upload_beta(
     redis::config cfg,
     std::shared_ptr<redis::connection> connection
@@ -358,7 +363,7 @@ auto co_handle_workshop_upload_beta(
 
     // TODO: temp helper for debugging.
     std::string message{"asdasd"};
-    co_return message;
+    // co_return message;
 
     auto ex = co_await asio::this_coro::executor;
 
@@ -424,13 +429,19 @@ auto co_handle_workshop_upload_beta(
     pub_req.push("PUBLISH", g_taskiq_redis_channel, msg_json);
     const auto [pub_req_ec, pub_req_size] = co_await connection->async_exec(
         pub_req, pub_resp, asio::as_tuple(asio::consign(asio::use_awaitable, connection)));
-    // TODO: check ec.
 
     if (pub_resp.has_value())
     {
         g_logger->debug("pub_req_size: {}", pub_req_size);
         g_logger->info("pub_resp: {}", pub_resp.value().at(0).value);
     }
+    if (pub_resp.has_error())
+    {
+        g_logger->error("redis publish error: {}", pub_resp.error().diagnostic);
+        co_return asio::error::operation_not_supported; // TODO: actual error codes!
+    }
+
+    // TODO: wait for task result from postgres here now?
 
 //    while (conn.will_reconnect())
 //    {
@@ -507,6 +518,7 @@ auto co_main(
                     break;
                 default:
                     g_logger->error("invalid MessageType: {}", mt);
+                    break;
             }
 
             if (send_resp_ec)
@@ -645,7 +657,9 @@ int main()
                 }
                 catch (const std::exception& ex)
                 {
-                    g_logger->error("co_main error: {}", ex.what());
+                    g_logger->error(
+                        "co_main error: {}\n{}",
+                        ex.what(), std::to_string(std::stacktrace::current()));
                     throw; // TODO: this throw does not get propagated?
                 }
             });
@@ -680,13 +694,35 @@ int main()
     catch (const std::exception& ex)
     {
         rc = EXIT_FAILURE;
-        std::cout << std::format("unhandled exception: {}", ex.what()) << std::endl;
+        if (g_logger)
+        {
+            g_logger->error(
+                "unhandled exception: {}:\n{}",
+                ex.what(), std::to_string(std::stacktrace::current()));
+        }
+        else
+        {
+            std::cerr << std::format(
+                "unhandled exception: {}:{}",
+                ex.what(), std::to_string(std::stacktrace::current())) << std::endl;
+        }
         THROW_IF_DEBUGGING();
     }
     catch (...)
     {
         rc = EXIT_FAILURE;
-        std::cout << "unhandled error" << std::endl;
+        if (g_logger)
+        {
+            g_logger->error(
+                "unhandled error:\n{}",
+                std::to_string(std::stacktrace::current()));
+        }
+        else
+        {
+            std::cerr << std::format(
+                "unhandled error:\n{}",
+                std::to_string(std::stacktrace::current())) << std::endl;
+        }
         THROW_IF_DEBUGGING();
     }
 
