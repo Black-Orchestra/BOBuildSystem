@@ -19,7 +19,6 @@
 
 #if BO_WINDOWS
 
-
 #ifndef __JETBRAINS_IDE__
 #include <SDKDDKVer.h> // Silence "Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately".
 #endif // __JETBRAINS_IDE__
@@ -39,10 +38,6 @@
 #include <boost/asio/use_future.hpp>
 #include <boost/cobalt.hpp>
 #include <boost/process/v2/process.hpp>
-#include <boost/redis/config.hpp>
-#include <boost/redis/connection.hpp>
-#include <boost/redis/request.hpp>
-#include <boost/redis/response.hpp>
 #include <boost/redis/src.hpp>
 
 #include <dpp/dpp.h>
@@ -365,7 +360,7 @@ auto co_handle_workshop_upload_beta(
     std::string message{"asdasd"};
     // co_return message;
 
-    auto ex = co_await asio::this_coro::executor;
+    const auto ex = co_await asio::this_coro::executor;
 
     // 1. Check if task lock exists.
     redis::request lock_req;
@@ -406,7 +401,7 @@ auto co_handle_workshop_upload_beta(
         // ec_.assign(lock_resp.error()); // TODO(IMPORTANT): make custom error category/categories!
         co_return asio::error::operation_not_supported;
     }
-    lock_resp->clear();  // TODO: NEEDED?
+    // lock_resp->clear();  // TODO: NEEDED?
 
     auto msg = taskiq::make_bo_sws_upload_msg();
     UUIDv4::UUIDGenerator<std::mt19937_64> uuid_gen{std::random_device()()};
@@ -466,10 +461,36 @@ auto co_main(
     // Create a new connection every time we get a new message. The rate at
     //   which we receive them is so low, it shouldn't matter here.
 
+    const auto ex = co_await asio::this_coro::executor;
+
     boost::system::result<std::string> job_result;
     boost::system::error_code job_error{};
     std::string job_result_value{};
     boost::system::error_code send_resp_ec{};
+
+    // TODO: how to create and clean up a new connection for each request?
+    auto conn = std::make_shared<redis::connection>(ex);
+
+    conn->async_run(
+        cfg,
+        {},
+        [conn](boost::system::error_code conn_ec)
+        {
+            g_logger->info("redis connection async_run cleanup");
+
+            if (conn)
+            {
+                conn->cancel();
+            }
+
+            // TODO: propagate ecs. But how?
+            if (conn_ec)
+            {
+                throw std::runtime_error(
+                    std::format("redis connection async_run error: {}", conn_ec.message()));
+            }
+        }
+    );
 
     while (true)
     {
@@ -483,24 +504,7 @@ auto co_main(
         if (!ec)
         {
             // redis::connection conn{co_await asio::this_coro::executor};
-            const auto ex = co_await asio::this_coro::executor;
-            // TODO: try unique_ptr here?
-            auto conn = std::make_shared<redis::connection>(ex);
-
-            conn->async_run(
-                cfg,
-                {},
-                [conn](boost::system::error_code conn_ec)
-                {
-                    if (conn)
-                    {
-                        conn->cancel();
-                    }
-                    // TODO: propagate ecs. But how?
-                    throw std::runtime_error(
-                        std::format("redis connection async_run error: {}", conn_ec.message()));
-                }
-            );
+//            auto conn = std::make_shared<redis::connection>(ex);
 
             switch (msg_type)
             {
@@ -527,8 +531,8 @@ auto co_main(
                                 send_resp_ec.message());
             }
 
-            conn->cancel();
-            conn.reset();
+//            conn->cancel();
+//            conn.reset();
         }
         else if (ec.value() == asio::error::eof)
         {
