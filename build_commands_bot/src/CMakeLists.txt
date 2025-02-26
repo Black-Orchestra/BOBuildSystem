@@ -45,6 +45,7 @@ target_link_libraries(
     Boost::system
     dpp
     glaze::glaze
+    libpqxx::pqxx
     spdlog::spdlog
     uuid_v4::uuid_v4
 )

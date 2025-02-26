@@ -21,9 +21,10 @@ endif ()
 if (WIN32)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-    # set(CMAKE_PDB_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+    set(CMAKE_PDB_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     cmake_print_variables(CMAKE_LIBRARY_OUTPUT_DIRECTORY)
     cmake_print_variables(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    cmake_print_variables(CMAKE_PDB_OUTPUT_DIRECTORY)
 endif ()
 
 include(cmake/dpp.cmake)
@@ -57,6 +58,12 @@ find_package(
     process
     redis
     system
+)
+
+find_package(
+    libpqxx
+    CONFIG
+    REQUIRED
 )
 
 add_subdirectory(src)

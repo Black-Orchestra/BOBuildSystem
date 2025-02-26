@@ -6,6 +6,7 @@
     "boost-redis",
     "boost-system",
     "glaze",
+    "libpqxx",
     "openssl",
     "spdlog"
   ],
