@@ -35,9 +35,8 @@ target_include_directories(
     ${CMAKE_SOURCE_DIR}/include/
 )
 
-target_link_libraries(
-    build_commands_bot
-    PRIVATE
+set(
+    BUILD_COMMANDS_BOT_LIBS
     Boost::asio
     Boost::cobalt
     Boost::process
@@ -48,6 +47,18 @@ target_link_libraries(
     libpqxx::pqxx
     spdlog::spdlog
     uuid_v4::uuid_v4
+)
+
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+    list(APPEND BUILD_COMMANDS_BOT_LIBS stdc++exp)
+endif ()
+
+cmake_print_variables(BUILD_COMMANDS_BOT_LIBS)
+
+target_link_libraries(
+    build_commands_bot
+    PRIVATE
+    ${BUILD_COMMANDS_BOT_LIBS}
 )
 
 target_compile_definitions(
