@@ -17,8 +17,10 @@ RUN echo "APT::Default-Release "stable";" >> /etc/apt/apt.conf.d/99defaultreleas
     mold \
     ninja-build \
     && apt install -y --no-install-recommends \
+    bison \
     ca-certificates \
     curl \
+    flex \
     git \
     libssl-dev \
     make \
