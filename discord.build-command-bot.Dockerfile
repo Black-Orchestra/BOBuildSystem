@@ -17,6 +17,7 @@ RUN echo "APT::Default-Release "stable";" >> /etc/apt/apt.conf.d/99defaultreleas
     mold \
     ninja-build \
     && apt install -y --no-install-recommends \
+    autoconf \
     bison \
     ca-certificates \
     curl \
