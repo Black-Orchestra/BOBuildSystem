@@ -42,6 +42,7 @@ set(
     Boost::process
     Boost::redis
     Boost::system
+    Boost::unordered
     dpp
     glaze::glaze
     libpqxx::pqxx

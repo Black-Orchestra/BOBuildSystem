@@ -51,6 +51,7 @@
 
 #include <glaze/glaze.hpp>
 
+#include "bobuild/redis_pool.hpp"
 #include "bobuild/taskiq.hpp"
 
 #if BO_WINDOWS
@@ -350,11 +351,11 @@ void bot_main(MessageChannel* msg_channel)
 // TODO: don't log or "handle" errors here, let the caller
 //   do all the logging etc., just return the error codes.
 auto co_handle_workshop_upload_beta(
-    redis::config cfg,
     std::shared_ptr<redis::connection> connection
 ) -> asio::awaitable<boost::system::result<std::string>>
 {
     g_logger->info("co_handle_workshop_upload_beta");
+    g_logger->debug("connection={}", fmt::ptr(&*connection));
 
     // TODO: temp helper for debugging.
     std::string message{"asdasd"};
@@ -469,28 +470,29 @@ auto co_main(
     boost::system::error_code send_resp_ec{};
 
     // TODO: how to create and clean up a new connection for each request?
-    auto conn = std::make_shared<redis::connection>(ex);
+//    auto conn = std::make_shared<redis::connection>(ex);
+    auto pool = bo::redis::ConnectionPool{cfg, ex};
 
-    conn->async_run(
-        cfg,
-        {},
-        [conn](boost::system::error_code conn_ec)
-        {
-            g_logger->info("redis connection async_run cleanup");
-
-            if (conn)
-            {
-                conn->cancel();
-            }
-
-            // TODO: propagate ecs. But how?
-            if (conn_ec)
-            {
-                throw std::runtime_error(
-                    std::format("redis connection async_run error: {}", conn_ec.message()));
-            }
-        }
-    );
+//    conn->async_run(
+//        cfg,
+//        boost::redis::logger{boost::redis::logger::level::debug},
+//        [conn](boost::system::error_code conn_ec)
+//        {
+//            g_logger->info("redis connection async_run cleanup");
+//
+//            if (conn)
+//            {
+//                conn->cancel();
+//            }
+//
+//            // TODO: propagate ecs. But how?
+//            if (conn_ec)
+//            {
+//                throw std::runtime_error(
+//                    std::format("redis connection async_run error: {}", conn_ec.message()));
+//            }
+//        }
+//    );
 
     while (true)
     {
@@ -503,13 +505,11 @@ auto co_main(
 
         if (!ec)
         {
-            // redis::connection conn{co_await asio::this_coro::executor};
-//            auto conn = std::make_shared<redis::connection>(ex);
-
             switch (msg_type)
             {
                 case MessageType::WorkshopUploadBeta:
-                    job_result = co_await co_handle_workshop_upload_beta(cfg, conn);
+                    job_result = co_await co_handle_workshop_upload_beta((co_await pool.acquire()).conn);
+                    // job_result = co_await co_handle_workshop_upload_beta(conn);
                     job_error = job_result.has_error() ? job_result.error() : job_error;
                     job_result_value = job_result.has_value() ? job_result.value() : "";
                     g_logger->debug("sending resp_channel resp");
@@ -530,9 +530,6 @@ auto co_main(
                 g_logger->error("async_send error: failed to send job result response: {}",
                                 send_resp_ec.message());
             }
-
-//            conn->cancel();
-//            conn.reset();
         }
         else if (ec.value() == asio::error::eof)
         {
@@ -543,7 +540,10 @@ auto co_main(
         {
             g_logger->error("co_main error: {}: {}", ec.value(), ec.message());
         }
+
     }
+
+    pool.cancel();
 }
 
 } // namespace

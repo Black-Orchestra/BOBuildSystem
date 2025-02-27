@@ -5,6 +5,7 @@
     "boost-process",
     "boost-redis",
     "boost-system",
+    "boost-unordered",
     "glaze",
     "libpqxx",
     "openssl",

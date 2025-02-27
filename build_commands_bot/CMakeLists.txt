@@ -58,6 +58,7 @@ find_package(
     process
     redis
     system
+    unordered
 )
 
 find_package(
