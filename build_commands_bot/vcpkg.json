@@ -2,6 +2,7 @@
   "dependencies": [
     "boost-asio",
     "boost-cobalt",
+    "boost-date-time",
     "boost-process",
     "boost-redis",
     "boost-system",
