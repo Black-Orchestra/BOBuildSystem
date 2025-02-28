@@ -34,6 +34,7 @@
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 #include <boost/cobalt.hpp>
@@ -72,6 +73,8 @@ namespace process = boost::process::v2;
 
 using boost::asio::experimental::channel;
 using boost::asio::experimental::concurrent_channel;
+
+using ConnectionPool = bo::redis::ConnectionPool<asio::any_io_executor>;
 
 enum class MessageType: std::uint8_t
 {
@@ -219,6 +222,11 @@ void bot_main(MessageChannel* msg_channel)
     const auto postgres_url = get_env_var("BO_POSTGRES_URL");
     const auto bot_token = get_env_var("BO_DISCORD_BUILD_COMMAND_BOT_TOKEN");
 
+    if (bot_token.empty())
+    {
+        throw std::runtime_error("invalid bot token");
+    }
+
     g_bot = std::make_shared<dpp::cluster>(bot_token);
 
     g_bot->on_log(
@@ -254,9 +262,13 @@ void bot_main(MessageChannel* msg_channel)
             const auto cmd_name = event.command.get_command_name();
             g_logger->info("processing command: {}", cmd_name);
 
+            const auto ex = asio::make_strand(msg_channel->get_executor());
+            MessageResponseChannel resp_channel{ex};
+
             if (cmd_name == g_cmd_name_sws_upload_beta)
             {
                 // TODO:
+                // - Check if current tag exists in repos.
                 // - Check if current tag exists in repos.
                 //   - Git repo: libgit2. (TODO: this might be too cumbersome!)
                 //   - Hg repos: asio process.
@@ -265,9 +277,8 @@ void bot_main(MessageChannel* msg_channel)
                 // - Fire off taskiq task!
                 //   - Publish it to redis.
 
-                MessageResponseChannel resp_channel{msg_channel->get_executor()};
                 auto sws_future = cobalt::spawn(
-                    msg_channel->get_executor(),
+                    ex,
                     send_workshop_upload_beta_msg_cobalt(msg_channel, &resp_channel),
                     asio::use_future
                 );
@@ -282,9 +293,6 @@ void bot_main(MessageChannel* msg_channel)
                 {
                     g_logger->error("job_result={}", job_result.error().message());
                 }
-
-                // TODO: we should probably wait to hear back from the
-                //   Python job here!
             }
             else if (cmd_name == g_cmd_name_sws_get_info)
             {
@@ -351,17 +359,20 @@ void bot_main(MessageChannel* msg_channel)
 // TODO: don't log or "handle" errors here, let the caller
 //   do all the logging etc., just return the error codes.
 auto co_handle_workshop_upload_beta(
-    std::shared_ptr<redis::connection> connection
+    ConnectionPool& pool
 ) -> asio::awaitable<boost::system::result<std::string>>
 {
     g_logger->info("co_handle_workshop_upload_beta");
-    g_logger->debug("connection={}", fmt::ptr(&*connection));
 
     // TODO: temp helper for debugging.
     std::string message{"asdasd"};
     // co_return message;
 
     const auto ex = co_await asio::this_coro::executor;
+    // TODO: this is destroyed early???
+    auto connection = co_await pool.acquire();
+    std::shared_ptr<boost::redis::connection> conn = connection.conn;
+    g_logger->debug("my conn={}", fmt::ptr(&*conn));
 
     // 1. Check if task lock exists.
     redis::request lock_req;
@@ -372,8 +383,8 @@ auto co_handle_workshop_upload_beta(
         "EX", g_taskiq_lock_timeout,
         "NX");
     g_logger->debug("before redis async_exec");
-    const auto [lock_req_ec, lock_resp_size] = co_await connection->async_exec(
-        lock_req, lock_resp, asio::as_tuple(asio::consign(asio::use_awaitable, connection)));
+    const auto [lock_req_ec, lock_resp_size] = co_await conn->async_exec(
+        lock_req, lock_resp, asio::as_tuple(asio::consign(asio::use_awaitable, conn)));
 
     if (lock_req_ec)
     {
@@ -420,11 +431,15 @@ auto co_handle_workshop_upload_beta(
         co_return asio::error::operation_not_supported;
     }
 
+    asio::deadline_timer x{ex};
+    x.expires_from_now(boost::posix_time::seconds(5));
+    co_await x.async_wait();
+
     redis::generic_response pub_resp; // TODO: what's the resp here?
     redis::request pub_req;
     pub_req.push("PUBLISH", g_taskiq_redis_channel, msg_json);
-    const auto [pub_req_ec, pub_req_size] = co_await connection->async_exec(
-        pub_req, pub_resp, asio::as_tuple(asio::consign(asio::use_awaitable, connection)));
+    const auto [pub_req_ec, pub_req_size] = co_await conn->async_exec(
+        pub_req, pub_resp, asio::as_tuple(asio::consign(asio::use_awaitable, conn)));
 
     if (pub_resp.has_value())
     {
@@ -469,30 +484,7 @@ auto co_main(
     std::string job_result_value{};
     boost::system::error_code send_resp_ec{};
 
-    // TODO: how to create and clean up a new connection for each request?
-//    auto conn = std::make_shared<redis::connection>(ex);
-    auto pool = bo::redis::ConnectionPool{cfg, ex};
-
-//    conn->async_run(
-//        cfg,
-//        boost::redis::logger{boost::redis::logger::level::debug},
-//        [conn](boost::system::error_code conn_ec)
-//        {
-//            g_logger->info("redis connection async_run cleanup");
-//
-//            if (conn)
-//            {
-//                conn->cancel();
-//            }
-//
-//            // TODO: propagate ecs. But how?
-//            if (conn_ec)
-//            {
-//                throw std::runtime_error(
-//                    std::format("redis connection async_run error: {}", conn_ec.message()));
-//            }
-//        }
-//    );
+    auto pool = ConnectionPool{cfg, ex};
 
     while (true)
     {
@@ -508,8 +500,7 @@ auto co_main(
             switch (msg_type)
             {
                 case MessageType::WorkshopUploadBeta:
-                    job_result = co_await co_handle_workshop_upload_beta((co_await pool.acquire()).conn);
-                    // job_result = co_await co_handle_workshop_upload_beta(conn);
+                    job_result = co_await co_handle_workshop_upload_beta(pool);
                     job_error = job_result.has_error() ? job_result.error() : job_error;
                     job_result_value = job_result.has_value() ? job_result.value() : "";
                     g_logger->debug("sending resp_channel resp");
@@ -601,7 +592,8 @@ int main()
         redis_cfg.username = "default";
         redis_cfg.password = "asd";
 
-        asio::io_context ioc{BOOST_ASIO_CONCURRENCY_HINT_1};
+        constexpr auto num_ioc_threads = 2;
+        asio::io_context ioc{num_ioc_threads};
 
         constexpr std::size_t msg_channel_size = 128;
         MessageChannel msg_channel{ioc.get_executor(), msg_channel_size};
@@ -684,6 +676,46 @@ int main()
 
         // TODO: is there any need to make this multi-threaded too?
         ioc.run();
+//        std::vector<std::thread> ioc_threads{num_ioc_threads};
+//        std::vector<std::exception_ptr> ioc_excs{num_ioc_threads};
+//        for (auto i = 0; i < num_ioc_threads; ++i)
+//        {
+//            std::thread ioc_thread{
+//                [&ioc, &ioc_excs]()
+//                {
+//                    try
+//                    {
+//                        ioc.run();
+//                    }
+//                    catch (const std::exception& e)
+//                    {
+//                        if (g_logger)
+//                        {
+//                            g_logger->error("ioc thread error: {}", e.what());
+//                        }
+//                        else
+//                        {
+//                            std::cerr << std::format("ioc thread error: {}\n",
+//                                                     e.what());
+//                        }
+//
+//                        ioc_excs.emplace_back(std::current_exception());
+//                    }
+//                }};
+//            ioc_threads.emplace_back(std::move(ioc_thread));
+//        }
+
+//        for (auto& ioc_thread: ioc_threads)
+//        {
+//            ioc_thread.join();
+//        }
+//        for (const auto& ioc_exc: ioc_excs)
+//        {
+//            if (ioc_exc)
+//            {
+//                std::rethrow_exception(ioc_exc);
+//            }
+//        }
 
         bot_thread.join();
 

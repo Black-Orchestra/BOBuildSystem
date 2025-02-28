@@ -5,10 +5,14 @@
 
 #include <memory>
 
+#include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/executor.hpp>
-#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/placeholders.hpp>
+#include <boost/bind/bind.hpp>
+#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/redis.hpp>
+#include <boost/system/system_error.hpp>
 #include <boost/unordered/concurrent_flat_map.hpp>
 
 #include "bobuild/bobuild.hpp"
@@ -25,8 +29,6 @@ template<typename ExecutorType = boost::asio::any_io_executor>
 class Connection
 {
 public:
-    // TODO: copy-constructors etc?
-
     Connection(
         ConnectionPool<ExecutorType>& pool,
         std::shared_ptr<boost::redis::connection> conn
@@ -36,19 +38,43 @@ public:
 
     ~Connection()
     {
+        std::cerr << std::format("bye from: {}\n", fmt::ptr(this));
         close();
     }
 
-    // TODO: should this be non-copyable?
-    // Connection(const Connection&) = delete;
+    Connection(const Connection&) = delete;
+
+    Connection(Connection&& other) noexcept
+        : conn(std::move(other.conn)), m_pool(other.m_pool)
+    {
+    }
 
     Connection& operator=(const Connection&) = delete;
+
+    Connection operator=(Connection&& other) noexcept
+    {
+        this->conn = std::move(other.conn);
+        this->m_pool = std::move(other.m_pool);
+    }
 
     // "Close" connection, i.e. return it to the pool.
     void close()
     {
-        std::cerr << "CLOSING CONN!" << std::endl;
-        m_pool.close_connection(conn);
+        if (conn)
+        {
+            std::cerr << "got conn\n";
+
+            std::cerr << "CLOSING CONN!" << std::endl;
+            // std::cerr << std::stacktrace::current() << std::endl;
+            // std::cerr << "-------------\n";
+            m_pool.close_connection(conn);
+            conn = nullptr;
+
+        }
+        else
+        {
+            std::cerr << "don't got conn\n";
+        }
     }
 
     std::shared_ptr<boost::redis::connection> conn;
@@ -71,8 +97,10 @@ public:
     ConnectionPool(
         boost::redis::config config,
         ExecutorType executor,
-        size_t pool_size = 4
-    ) : m_config{std::move(config)}
+        std::size_t pool_size = 4,
+        boost::posix_time::time_duration timer_interval = boost::posix_time::seconds{10}
+    ) : m_pool{pool_size}, m_config{std::move(config)}, m_closed{false},
+        m_timer{executor, timer_interval}, m_timer_interval{timer_interval}
     {
         for (auto i = 0; i < pool_size; ++i)
         {
@@ -82,7 +110,7 @@ public:
             // conn->async_run(m_config, {}, asio::consign(asio::detached, conn));
             conn->async_run(
                 m_config,
-                boost::redis::logger{boost::redis::logger::level::debug},
+                boost::redis::logger{boost::redis::logger::level::err},
                 [conn](boost::system::error_code conn_ec)
                 {
                     std::cout << "conn async_run completion!" << std::endl;
@@ -102,6 +130,14 @@ public:
             // TODO: check if exists, error handling?
             m_pool.emplace(conn, false);
         }
+
+        m_timer.async_wait(
+            boost::bind(
+                &ConnectionPool::maintenance,
+                this,
+                boost::asio::placeholders::error
+            )
+        );
     }
 
     ~ConnectionPool()
@@ -119,6 +155,8 @@ public:
 
     void cancel()
     {
+        m_closed = true;
+        m_timer.cancel();
         m_pool.visit_all(
             [](auto& x)
             {
@@ -138,13 +176,27 @@ public:
                 x.second = false;
             }
         );
+
+        // TODO: DEBUG.
+        m_pool.cvisit_all(
+            [](const auto& x)
+            {
+                std::cerr << std::format("fuck: {}: {}\n", fmt::ptr(&*x.first), x.second);
+            }
+        );
     }
 
-    // TODO: unique pointer?
-    asio::awaitable <Connection<ExecutorType>> acquire()
+    // TODO: error if closed?
+    asio::awaitable <PoolConnection> acquire()
     {
+        if (m_closed)
+        {
+            throw std::exception("TODO: error codes etc (closed)");
+        }
+
         std::shared_ptr<boost::redis::connection> conn = nullptr;
 
+        // TODO: how to return early from here?
         m_pool.visit_all(
             [&conn](auto& x)
             {
@@ -156,9 +208,17 @@ public:
             }
         );
 
+        // TODO: DEBUG!!!
+        m_pool.cvisit_all(
+            [](const auto& x)
+            {
+                std::cerr << std::format("ACQUIRE: fuck: {}: {}\n", fmt::ptr(&*x.first), x.second);
+            }
+        );
+
         if (conn)
         {
-            co_return std::move(Connection<ExecutorType>{*this, conn});
+            co_return PoolConnection{*this, conn};
         }
 
         // TODO: retrying or some shit?
@@ -166,9 +226,68 @@ public:
     }
 
 private:
-    // TODO: vector of pairs: [in_use_flag, connection]
+    void maintenance(const boost::system::error_code& error)
+    {
+        if (!error)
+        {
+            std::cerr << "MAINTENANCE TIME" << std::endl;
+
+            // TODO: is this thread safe actually?
+            m_pool.visit_all(
+                [](auto& x)
+                {
+                    if (!x.second)
+                    {
+                        x.second = true; // TODO: is this stupid?
+
+                        std::shared_ptr<boost::redis::connection> conn = x.first;
+                        std::cerr << std::format("maintenance, conn={}", fmt::ptr(&*conn))
+                                  << std::endl;
+
+                        boost::redis::request req;
+                        req.push("PING", "");
+                        boost::system::error_code error{};
+                        conn->async_exec(
+                            req,
+                            boost::redis::ignore,
+                            asio::consign(asio::redirect_error(error), conn)
+                        );
+
+                        if (error)
+                        {
+                            // TODO: just ignore this error?
+                            std::cerr << "ping error: " << error.message() << "\n";
+                        }
+
+                        x.second = false; // TODO: is this stupid?
+                    }
+                }
+            );
+
+            if (m_closed)
+            {
+                m_timer.cancel();
+            }
+            if (!m_closed)
+            {
+                m_timer.expires_from_now(m_timer_interval);
+                m_timer.async_wait(
+                    boost::bind(
+                        &ConnectionPool::maintenance,
+                        this,
+                        boost::asio::placeholders::error
+                    )
+                );
+            }
+        }
+    }
+
+    // Map of pairs: [connection ptr, connection in use flag].
     boost::concurrent_flat_map<std::shared_ptr<boost::redis::connection>, bool> m_pool;
     boost::redis::config m_config;
+    bool m_closed;
+    asio::deadline_timer m_timer;
+    boost::posix_time::time_duration m_timer_interval;
 };
 
 }
