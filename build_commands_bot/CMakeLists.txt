@@ -55,6 +55,7 @@ find_package(
     COMPONENTS
     asio
     cobalt
+    date_time
     process
     redis
     system

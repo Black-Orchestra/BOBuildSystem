@@ -39,6 +39,7 @@ set(
     BUILD_COMMANDS_BOT_LIBS
     Boost::asio
     Boost::cobalt
+    Boost::date_time
     Boost::process
     Boost::redis
     Boost::system
