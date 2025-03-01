@@ -59,6 +59,8 @@
 
 #include "bobuild/ucrt.hpp"
 
+#include "git.h"
+
 #endif // BO_WINDOWS
 
 namespace
@@ -366,10 +368,8 @@ auto co_handle_workshop_upload_beta(
 
     // TODO: temp helper for debugging.
     std::string message{"asdasd"};
-    // co_return message;
 
     const auto ex = co_await asio::this_coro::executor;
-    // TODO: this is destroyed early???
     auto connection = co_await pool.acquire();
     std::shared_ptr<boost::redis::connection> conn = connection.conn;
     g_logger->debug("my conn={}", fmt::ptr(&*conn));
@@ -388,10 +388,7 @@ auto co_handle_workshop_upload_beta(
 
     if (lock_req_ec)
     {
-        std::cout << "what the fuck" << std::endl;
         // TODO: propagate error codes!
-//        throw std::runtime_error(std::format(
-//            "redis error: {}", lock_req_ec.message()));
         co_return lock_req_ec;
     }
     g_logger->debug("after redis async_exec");
@@ -425,8 +422,6 @@ auto co_handle_workshop_upload_beta(
     if (json_ec)
     {
         // TODO: propagate error codes!
-//        throw std::runtime_error(std::format(
-//            "glz::write_json error: {}", json_ec.custom_error_message));
         // co_return json_ec; // TODO: CUSTOM ERROR CATEGORIES!
         co_return asio::error::operation_not_supported;
     }
@@ -453,13 +448,6 @@ auto co_handle_workshop_upload_beta(
     }
 
     // TODO: wait for task result from postgres here now?
-
-//    while (conn.will_reconnect())
-//    {
-//        asio::deadline_timer t{ex};
-//        t.expires_from_now(boost::posix_time::microsec(1));
-//        co_await t.async_wait(asio::use_awaitable);
-//    }
 
     // TODO: actual error handling!
     co_return message;
@@ -562,6 +550,8 @@ int main()
         spdlog::register_logger(g_logger);
         g_logger->set_level(default_log_level);
         g_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e%z] [%n] [%^%l%$] [th#%t]: %v");
+
+        g_logger->info("commit={}, dirty={}", git::CommitSHA1(), git::AnyUncommittedChanges());
 
 #if BO_WINDOWS
         const auto ucrt_version = bo::GetUCRTVersion();
