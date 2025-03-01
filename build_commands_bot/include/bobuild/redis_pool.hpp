@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <exception>
 #include <memory>
 
 #include <boost/asio/deadline_timer.hpp>
@@ -31,8 +32,8 @@ class Connection
 public:
     Connection(
         ConnectionPool<ExecutorType>& pool,
-        std::shared_ptr<boost::redis::connection> conn
-    ) : conn(std::move(conn)), m_pool(pool)
+        std::shared_ptr<boost::redis::connection> conn_
+    ) : conn(std::move(conn_)), m_pool(pool)
     {
     }
 
@@ -191,7 +192,7 @@ public:
     {
         if (m_closed)
         {
-            throw std::exception("TODO: error codes etc (closed)");
+            throw std::runtime_error("TODO: error codes etc (closed)");
         }
 
         std::shared_ptr<boost::redis::connection> conn = nullptr;
@@ -222,7 +223,7 @@ public:
         }
 
         // TODO: retrying or some shit?
-        throw std::exception("TODO: no conn!");
+        throw std::runtime_error("TODO: no conn!");
     }
 
 private:
