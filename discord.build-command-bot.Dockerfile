@@ -46,6 +46,7 @@ RUN chown -R bot:bot /home/bot/
 USER bot
 WORKDIR /home/bot/
 
+COPY --chown=bot:bot .git/ .git/
 COPY --chown=bot:bot .gitmodules .
 COPY --chown=bot:bot README.md .
 COPY --chown=bot:bot build_commands_bot/cmake/ ./build_commands_bot/cmake/
