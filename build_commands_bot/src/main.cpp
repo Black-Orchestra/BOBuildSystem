@@ -55,11 +55,11 @@
 #include "bobuild/redis_pool.hpp"
 #include "bobuild/taskiq.hpp"
 
+#include "git.h"
+
 #if BO_WINDOWS
 
 #include "bobuild/ucrt.hpp"
-
-#include "git.h"
 
 #endif // BO_WINDOWS
 
