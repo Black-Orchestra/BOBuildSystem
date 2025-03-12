@@ -7,7 +7,7 @@ import signal
 from dataclasses import dataclass
 from enum import IntEnum
 from enum import StrEnum
-from typing import AsyncGenerator
+from typing import AsyncIterator
 from typing import cast
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
@@ -259,7 +259,7 @@ class WebAdmin:
                 if running:
                     await asyncio.sleep(self._get_messages_interval)
 
-    async def messages(self) -> AsyncGenerator[ChatMessage]:
+    async def messages(self) -> AsyncIterator[ChatMessage]:
         try:
             while msg := await self._msg_queue.get():
                 yield msg
