@@ -41,7 +41,7 @@ struct Message
     std::map<std::string, std::string> kwargs{};
     std::map<std::string, std::string> labels{};
 };
-static_assert(glz::detail::reflectable<Message>);
+static_assert(glz::reflectable<Message>);
 
 inline Message make_bo_sws_upload_msg()
 {
