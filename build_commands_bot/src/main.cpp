@@ -666,46 +666,6 @@ int main()
 
         // TODO: is there any need to make this multi-threaded too?
         ioc.run();
-//        std::vector<std::thread> ioc_threads{num_ioc_threads};
-//        std::vector<std::exception_ptr> ioc_excs{num_ioc_threads};
-//        for (auto i = 0; i < num_ioc_threads; ++i)
-//        {
-//            std::thread ioc_thread{
-//                [&ioc, &ioc_excs]()
-//                {
-//                    try
-//                    {
-//                        ioc.run();
-//                    }
-//                    catch (const std::exception& e)
-//                    {
-//                        if (g_logger)
-//                        {
-//                            g_logger->error("ioc thread error: {}", e.what());
-//                        }
-//                        else
-//                        {
-//                            std::cerr << std::format("ioc thread error: {}\n",
-//                                                     e.what());
-//                        }
-//
-//                        ioc_excs.emplace_back(std::current_exception());
-//                    }
-//                }};
-//            ioc_threads.emplace_back(std::move(ioc_thread));
-//        }
-
-//        for (auto& ioc_thread: ioc_threads)
-//        {
-//            ioc_thread.join();
-//        }
-//        for (const auto& ioc_exc: ioc_excs)
-//        {
-//            if (ioc_exc)
-//            {
-//                std::rethrow_exception(ioc_exc);
-//            }
-//        }
 
         bot_thread.join();
 
