@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
     "Pillow==11.1.0",
     "PyAutoGUI==0.9.54",
-    "aiohttp[speedups]==3.11.12",
+    "aiohttp[speedups]==3.11.14",
     "asyncpg==0.30.0",
     "audioop-lts==0.2.1; python_version >= '3.13'", # Needed by discord.py.
     "beautifulsoup4==4.13.0",
