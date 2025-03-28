@@ -462,9 +462,6 @@ auto co_main(
     // - while running:
     // - get message from "queue"
 
-    // Create a new connection every time we get a new message. The rate at
-    //   which we receive them is so low, it shouldn't matter here.
-
     const auto ex = co_await asio::this_coro::executor;
 
     boost::system::result<std::string> job_result;
