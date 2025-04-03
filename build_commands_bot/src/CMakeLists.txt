@@ -79,6 +79,7 @@ target_compile_definitions(
     DPP_CORO
 )
 
+# TODO: why's this here?
 target_include_directories(
     build_commands_bot
     PRIVATE
