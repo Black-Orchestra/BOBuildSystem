@@ -218,6 +218,33 @@ auto send_workshop_upload_beta_msg_cobalt(
     co_return resp;
 }
 
+// TODO: what should this return?
+dpp::task<void> start_task_workshop_upload_beta(
+    MessageChannel* msg_channel,
+    MessageResponseChannel* resp_channel,
+    const asio::strand<asio::any_io_executor>* strand
+)
+{
+    auto sws_future = cobalt::spawn(
+        strand->get_inner_executor(),
+        send_workshop_upload_beta_msg_cobalt(msg_channel, resp_channel),
+        asio::use_future
+    );
+    // TODO: we need a timeout here!
+    const auto job_result = sws_future.get();
+    resp_channel->cancel();
+    if (job_result)
+    {
+        g_logger->info("job_result={}", job_result.value());
+    }
+    else
+    {
+        g_logger->error("job_result={}", job_result.error().message());
+    }
+
+    co_return;
+}
+
 void bot_main(MessageChannel* msg_channel)
 {
     const auto redis_url = get_env_var("BO_REDIS_URL");
@@ -264,8 +291,11 @@ void bot_main(MessageChannel* msg_channel)
             const auto cmd_name = event.command.get_command_name();
             g_logger->info("processing command: {}", cmd_name);
 
-            const auto ex = asio::make_strand(msg_channel->get_executor());
-            MessageResponseChannel resp_channel{ex};
+            // TODO: what exactly is the point of this strand since we make a new one
+            //   every time we enter this function? Just get rid of the strand, or
+            //   move it to the outer block?
+            const auto strand = asio::make_strand(msg_channel->get_executor());
+            MessageResponseChannel resp_channel{strand};
 
             if (cmd_name == g_cmd_name_sws_upload_beta)
             {
@@ -279,22 +309,11 @@ void bot_main(MessageChannel* msg_channel)
                 // - Fire off taskiq task!
                 //   - Publish it to redis.
 
-                auto sws_future = cobalt::spawn(
-                    ex,
-                    send_workshop_upload_beta_msg_cobalt(msg_channel, &resp_channel),
-                    asio::use_future
+                co_await start_task_workshop_upload_beta(
+                    msg_channel,
+                    &resp_channel,
+                    &strand
                 );
-                // TODO: we need a timeout here!
-                const auto job_result = sws_future.get();
-                resp_channel.cancel();
-                if (job_result)
-                {
-                    g_logger->info("job_result={}", job_result.value());
-                }
-                else
-                {
-                    g_logger->error("job_result={}", job_result.error().message());
-                }
             }
             else if (cmd_name == g_cmd_name_sws_get_info)
             {
@@ -708,6 +727,9 @@ int main()
         }
         THROW_IF_DEBUGGING();
     }
+
+    // TODO: logger/app cleanup needs some more improvements.
+    //   Check out how it is done in the DPP template project!
 
     if (g_logger)
     {
