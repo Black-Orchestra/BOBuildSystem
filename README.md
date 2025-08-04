@@ -20,7 +20,7 @@ pip install -e .[dev]
 ```
 
 When doing changes, make sure type hints and type safety
-is at least mostly correct. Type errors and warnings
+are at least mostly correct. Type errors and warnings
 should only be silenced if there is no proper fix for them.
 Use mypy to check for typing errors:
 
@@ -51,18 +51,24 @@ TODO: document these.
 
 ## Development TODOs
 
+- Convert the project to use uv!
+
+- Setup script(s) should check for the latest versions before
+  installing dependencies! Use GitHub API, HTML parsing, etc. to
+  achieve this!
+
 - Setup script to run BO server as a Windows service.
 - Server installation:
-    - Make sure up to date DLLs are fetched from Steam.
-    - Make sure server configuration is correct:
+    - Make sure up-to-date DLLs are fetched from Steam.
+    - Make sure the server configuration is correct:
         - WebAdmin enabled, correct port.
         - Suppression of useful logs removed.
         - Chat logs, etc. enabled.
     - Make sure GAM packages are installed!
 - Server workshop handling:
-    - Private items -> can't leverage built-in SWS downloader?
+    - Private items → can't leverage built-in SWS downloader?
         - Try to download them manually with SteamCMD.
-        - Still put them in server's list of SWS items?
+        - Still put them in the server's list of SWS items?
         - What happens to clients who can see the items when they join
           the server, but the server itself can't see them? The server
           will still have the files. Investigate.
